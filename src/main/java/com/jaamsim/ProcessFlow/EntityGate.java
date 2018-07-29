@@ -33,7 +33,7 @@ public class EntityGate extends LinkedService {
 	private DisplayEntity servedEntity; // the entity about to be released from the queue
 
 	{
-		releaseDelay = new SampleInput("ReleaseDelay", "Key Inputs", new SampleConstant(0.0));
+		releaseDelay = new SampleInput("ReleaseDelay", KEY_INPUTS, new SampleConstant(0.0));
 		releaseDelay.setUnitType(TimeUnit.class);
 		releaseDelay.setValidRange(0.0, Double.POSITIVE_INFINITY);
 		releaseDelay.setEntity(this);
@@ -78,7 +78,6 @@ public class EntityGate extends LinkedService {
 
 		// Select the next entity to release
 		servedEntity = this.getNextEntityForMatch(m);
-		this.moveToProcessPosition(servedEntity);
 
 		return true;
 	}
@@ -99,6 +98,13 @@ public class EntityGate extends LinkedService {
 	@Override
 	protected double getStepDuration(double simTime) {
 		return releaseDelay.getValue().getNextSample(simTime);
+	}
+
+	@Override
+	public void updateGraphics(double simTime) {
+		if (servedEntity == null)
+			return;
+		moveToProcessPosition(servedEntity);
 	}
 
 }

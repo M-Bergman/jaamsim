@@ -1,7 +1,7 @@
 /*
  * JaamSim Discrete Event Simulation
  * Copyright (C) 2013 Ausenco Engineering Canada Inc.
- * Copyright (C) 2016 JaamSim Software Inc.
+ * Copyright (C) 2016-2018 JaamSim Software Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@ import com.jaamsim.Graphics.DisplayEntity;
 import com.jaamsim.Samples.SampleConstant;
 import com.jaamsim.Samples.SampleInput;
 import com.jaamsim.Samples.SampleProvider;
+import com.jaamsim.Statistics.SampleStatistics;
 import com.jaamsim.basicsim.Entity;
 import com.jaamsim.basicsim.Simulation;
 import com.jaamsim.events.EventManager;
@@ -69,35 +70,30 @@ implements SampleProvider {
 	         exampleList = {"200.0", "InputValue1", "'2 * [InputValue1].Value'"})
 	protected final SampleInput maxValueInput;
 
-	private int sampleCount;
-	private double sampleSum;
-	private double sampleSquaredSum;
-	private double sampleMin;
-	private double sampleMax;
-
+	private final SampleStatistics stats = new SampleStatistics();
 	private double lastSample = 0;
 
 	private static int MAX_ATTEMPTS = 1000;
 
 	{
-		unitType = new UnitTypeInput("UnitType", "Key Inputs", UserSpecifiedUnit.class);
+		unitType = new UnitTypeInput("UnitType", KEY_INPUTS, UserSpecifiedUnit.class);
 		unitType.setRequired(true);
 		this.addInput(unitType);
 
-		randomSeedInput = new IntegerInput("RandomSeed", "Key Inputs", -1);
+		randomSeedInput = new IntegerInput("RandomSeed", KEY_INPUTS, -1);
 		randomSeedInput.setValidRange(0, Integer.MAX_VALUE);
 		randomSeedInput.setRequired(true);
 		randomSeedInput.setDefaultText("None");
 		this.addInput(randomSeedInput);
 
 		SampleConstant negInf = new SampleConstant(Double.NEGATIVE_INFINITY);
-		minValueInput = new SampleInput("MinValue", "Key Inputs", negInf);
+		minValueInput = new SampleInput("MinValue", KEY_INPUTS, negInf);
 		minValueInput.setUnitType(UserSpecifiedUnit.class);
 		minValueInput.setEntity(this);
 		this.addInput(minValueInput);
 
 		SampleConstant posInf = new SampleConstant(Double.POSITIVE_INFINITY);
-		maxValueInput = new SampleInput("MaxValue", "Key Inputs", posInf);
+		maxValueInput = new SampleInput("MaxValue", KEY_INPUTS, posInf);
 		maxValueInput.setUnitType(UserSpecifiedUnit.class);
 		maxValueInput.setEntity(this);
 		this.addInput(maxValueInput);
@@ -118,14 +114,7 @@ implements SampleProvider {
 	@Override
 	public void earlyInit() {
 		super.earlyInit();
-
-		// Initialise the sample statistics
-		sampleCount = 0;
-		sampleSum = 0.0;
-		sampleSquaredSum = 0.0;
-		sampleMin = Double.POSITIVE_INFINITY;
-		sampleMax = Double.NEGATIVE_INFINITY;
-
+		stats.clear();
 		lastSample = getMeanValue(0);
 	}
 
@@ -154,7 +143,7 @@ implements SampleProvider {
 		}
 
 		// Set the random number seed next unused value
-		InputAgent.applyArgs(this, "RandomSeed", String.format("%s", seed+1));
+		InputAgent.applyIntegers(this, randomSeedInput.getKeyword(), seed + 1);
 	}
 
 	@Override
@@ -220,13 +209,7 @@ implements SampleProvider {
 		       nextSample > maxVal);
 
 		lastSample = nextSample;
-
-		// Collect statistics on the sampled values
-		sampleCount++;
-		sampleSum += nextSample;
-		sampleSquaredSum += nextSample * nextSample;
-		sampleMin = Math.min(sampleMin, nextSample);
-		sampleMax = Math.max(sampleMax, nextSample);
+		stats.addValue(nextSample);
 		return nextSample;
 	}
 
@@ -275,8 +258,8 @@ implements SampleProvider {
 	 description = "The number of times the probability distribution has been sampled.",
 	    unitType = DimensionlessUnit.class,
 	    sequence = 3)
-	public int getNumberOfSamples(double simTime) {
-		return sampleCount;
+	public long getNumberOfSamples(double simTime) {
+		return stats.getCount();
 	}
 
 	@Output(name = "SampleMean",
@@ -284,7 +267,7 @@ implements SampleProvider {
 	    unitType = UserSpecifiedUnit.class,
 	    sequence = 4)
 	public double getSampleMean(double simTime) {
-		return sampleSum / sampleCount;
+		return stats.getMean();
 	}
 
 	@Output(name = "SampleStandardDeviation",
@@ -293,8 +276,7 @@ implements SampleProvider {
 	    unitType = UserSpecifiedUnit.class,
 	    sequence = 5)
 	public double getSampleStandardDeviation(double simTime) {
-		double sampleMean = sampleSum / sampleCount;
-		return Math.sqrt( sampleSquaredSum/sampleCount - sampleMean*sampleMean );
+		return stats.getStandardDeviation();
 	}
 
 	@Output(name = "SampleMin",
@@ -302,7 +284,7 @@ implements SampleProvider {
 	    unitType = UserSpecifiedUnit.class,
 	    sequence = 6)
 	public double getSampleMin(double simTime) {
-		return sampleMin;
+		return stats.getMin();
 	}
 
 	@Output(name = "SampleMax",
@@ -310,6 +292,6 @@ implements SampleProvider {
 	    unitType = UserSpecifiedUnit.class,
 	    sequence = 7)
 	public double getSampleMax(double simTime) {
-		return sampleMax;
+		return stats.getMax();
 	}
 }

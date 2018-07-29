@@ -1,6 +1,7 @@
 /*
  * JaamSim Discrete Event Simulation
  * Copyright (C) 2011 Ausenco Engineering Canada Inc.
+ * Copyright (C) 2018 JaamSim Software Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +17,8 @@
  */
 package com.jaamsim.ui;
 
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
 import java.awt.event.MouseEvent;
@@ -40,7 +43,6 @@ import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
 import javax.swing.tree.TreeSelectionModel;
 
-import com.jaamsim.Commands.DeleteCommand;
 import com.jaamsim.Graphics.DisplayEntity;
 import com.jaamsim.Graphics.EntityLabel;
 import com.jaamsim.basicsim.Entity;
@@ -85,8 +87,21 @@ public class ObjectSelector extends FrameBox {
 
 		entSequence = 0;
 
-		setLocation(GUIFrame.COL1_START, GUIFrame.BOTTOM_START);
-		setSize(GUIFrame.COL1_WIDTH, GUIFrame.HALF_BOTTOM);
+		setLocation(Simulation.getObjectSelectorPos().get(0), Simulation.getObjectSelectorPos().get(1));
+		setSize(Simulation.getObjectSelectorSize().get(0), Simulation.getObjectSelectorSize().get(1));
+
+		addComponentListener(new ComponentAdapter() {
+
+			@Override
+			public void componentMoved(ComponentEvent e) {
+				Simulation.setObjectSelectorPos(getLocation().x, getLocation().y);
+			}
+
+			@Override
+			public void componentResized(ComponentEvent e) {
+				Simulation.setObjectSelectorSize(getSize().width, getSize().height);
+			}
+		});
 
 		tree.addTreeSelectionListener( new MyTreeSelectionListener() );
 		treeModel.addTreeModelListener( new MyTreeModelListener(tree) );
@@ -209,16 +224,20 @@ public class ObjectSelector extends FrameBox {
 				final ObjectType type = ObjectType.getAll().get(i);
 				if (type == null)
 					continue;
+				String paletteName = type.getPaletteName();
+				String typeName = type.getName();
 
 				// Find or create the node for the palette
-				DefaultMutableTreeNode paletteNode = getNodeFor_In(type.getPaletteName(), top);
+				DefaultMutableTreeNode paletteNode = getNodeFor_In(paletteName, top);
 				if (paletteNode == null) {
-					paletteNode = new DefaultMutableTreeNode(type.getPaletteName());
+					paletteNode = new DefaultMutableTreeNode(paletteName);
 					top.add(paletteNode);
 				}
 
 				// Add the node for the Object Type to the palette
-				DefaultMutableTreeNode typeNode = new DefaultMutableTreeNode(type.getName(), true);
+				if (typeName == null || typeName.equals(paletteName))
+					continue;
+				DefaultMutableTreeNode typeNode = new DefaultMutableTreeNode(typeName, true);
 				paletteNode.add(typeNode);
 			}
 			catch (IndexOutOfBoundsException e) {}
@@ -239,8 +258,8 @@ public class ObjectSelector extends FrameBox {
 				if (ent == tls)
 					continue;
 
-				// Do not include the units or views
-				if (ent instanceof Unit || ent instanceof View)
+				// Do not include the units
+				if (ent instanceof Unit)
 					continue;
 
 				// Apply an upper bound on the number of generated entities to display
@@ -268,14 +287,19 @@ public class ObjectSelector extends FrameBox {
 				final ObjectType type = ent.getObjectType();
 				if (type == null)
 					continue;
+				String paletteName = type.getPaletteName();
+				String typeName = type.getName();
 
 				// Find the palette node for this entity
-				DefaultMutableTreeNode paletteNode = getNodeFor_In(type.getPaletteName(), top);
+				DefaultMutableTreeNode paletteNode = getNodeFor_In(paletteName, top);
 				if (paletteNode == null)
 					continue;
 
 				// Find the object type node for this entity
-				DefaultMutableTreeNode typeNode = getNodeFor_In(type.getName(), paletteNode);
+				DefaultMutableTreeNode typeNode = getNodeFor_In(typeName, paletteNode);
+				if (typeName != null && typeName.equals(paletteName)) {
+					typeNode = paletteNode;
+				}
 				if (typeNode == null)
 					continue;
 
@@ -294,6 +318,8 @@ public class ObjectSelector extends FrameBox {
 			Enumeration<?> typeEnum = paletteNode.children();
 			while (typeEnum.hasMoreElements()) {
 				DefaultMutableTreeNode typeNode = (DefaultMutableTreeNode)typeEnum.nextElement();
+				if (!typeNode.getAllowsChildren())
+					continue;
 				if (typeNode.isLeaf())
 					nodesToRemove.add(typeNode);
 			}
@@ -487,7 +513,7 @@ public class ObjectSelector extends FrameBox {
 
 			// Right mouse click on a movable DisplayEntity
 			menu.removeAll();
-			ContextMenu.populateMenu(menu, currentEntity, e.getX(), e.getY());
+			ContextMenu.populateMenu(menu, currentEntity, -1, e.getComponent(), e.getX(), e.getY());
 			menu.show(e.getComponent(), e.getX(), e.getX());
 		}
 		@Override
@@ -503,20 +529,16 @@ public class ObjectSelector extends FrameBox {
 	static class MyKeyListener implements KeyListener {
 		@Override
 		public void keyReleased(KeyEvent e) {
-
 			if (e.getKeyCode() != KeyEvent.VK_DELETE)
 				return;
 
-			if(currentEntity instanceof DisplayEntity ) {
-				DisplayEntity disp = (DisplayEntity)currentEntity;
+			// Cannot delete a non-movable entity
+			if (currentEntity instanceof DisplayEntity
+					&& !((DisplayEntity) currentEntity).isMovable())
+				return;
 
-				if(! disp.isMovable())
-					return;
-
-				// Delete key was released on a movable DisplayEntity
-				InputAgent.storeAndExecute(new DeleteCommand(disp));
-				FrameBox.setSelectedEntity(null, false);
-			}
+			currentEntity.delete();
+			FrameBox.setSelectedEntity(null, false);
 		}
 		@Override
 		public void keyPressed(KeyEvent e) {}

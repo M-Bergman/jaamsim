@@ -1,6 +1,6 @@
 /*
  * JaamSim Discrete Event Simulation
- * Copyright (C) 2016 JaamSim Software Inc.
+ * Copyright (C) 2016-2018 JaamSim Software Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,8 +28,10 @@ public abstract class Device extends StateUserEntity {
 	private double lastUpdateTime; // simulation time at which the process was updated last
 	private double duration; // calculated duration of the process time step
 	private long endTicks;  // planned simulation time in ticks at the end of the next process step
-	private boolean downtimePending;  // indicates that a downtime event is ready to start
+	private boolean forcedDowntimePending;  // indicates that a forced downtime event is ready to start
+	private boolean immediateDowntimePending;  // indicates that an immediate downtime event is ready to start
 	private boolean stepCompleted;  // indicates that the last process time step was completed
+	private boolean processing;  // indicates that the process loop is active
 
 	public Device() {}
 
@@ -40,40 +42,48 @@ public abstract class Device extends StateUserEntity {
 		duration = 0.0;
 		endTicks = 0L;
 		lastUpdateTime = 0.0d;
-		downtimePending = false;
+		forcedDowntimePending = false;
+		immediateDowntimePending = false;
 		stepCompleted = true;
+		processing = false;
+	}
+
+	/**
+	 * Restarts the processing loop.
+	 */
+	public final void restart() {
+		if (isTraceFlag()) trace(0, "restart");
+		if (processing)
+			return;
+		processing = true;
+		setBusy(true);
+		startStep();
 	}
 
 	/**
 	 * Starts the next time step for the process.
 	 */
-	public final void startStep() {
+	private final void startStep() {
 		if (isTraceFlag()) {
 			trace(0, "startStep");
-			traceLine(1, "endActionHandle.isScheduled=%s, isAvailable=%s, forcedDowntimePending=%s",
-					endStepHandle.isScheduled(), this.isAvailable(), downtimePending);
+			traceLine(1, "isAvailable=%s, forcedDowntimePending=%s, immediateDowntimePending=%s",
+					isAvailable(), forcedDowntimePending, immediateDowntimePending);
 		}
 
 		double simTime = this.getSimTime();
 
 		// Is the process loop is already working?
 		if (endStepHandle.isScheduled()) {
-			this.setPresentState();
-			return;
+			error("Processing is already in progress.");
 		}
 
 		// Stop if any of the thresholds, maintenance, or breakdowns close the operation
 		// or if a forced downtime is about to begin
-		if (!this.isAvailable() || downtimePending) {
-			downtimePending = false;
+		if (!isAvailable() || isReadyForDowntime()) {
+			forcedDowntimePending = false;
+			immediateDowntimePending = false;
 			this.stopProcessing();
 			return;
-		}
-
-		// Set the state
-		if (!isBusy()) {
-			this.setBusy(true);
-			this.setPresentState();
 		}
 
 		// Set the last update time in case processing is restarting after a stoppage
@@ -95,11 +105,17 @@ public abstract class Device extends StateUserEntity {
 		if (duration == Double.POSITIVE_INFINITY)
 			error("Infinite duration");
 
+		// Set the state for the time step
+		long durTicks = EventManager.secsToNearestTick(duration);
+		if (durTicks > 0L) {
+			setPresentState();
+		}
+
 		// Schedule the completion of the time step
 		stepCompleted = false;
-		endTicks = EventManager.calcSimTicks(duration);
+		endTicks = getSimTicks() + durTicks;
 		if (isTraceFlag()) traceLine(1, "duration=%.6f", duration);
-		this.scheduleProcess(duration, 5, true, endStepTarget, endStepHandle);  // FIFO order
+		EventManager.scheduleTicks(durTicks, 5, true, endStepTarget, endStepHandle);  // FIFO order
 
 		// Notify other processes that are dependent on this one
 		if (this.isNewStepReqd(stepCompleted)) {
@@ -168,6 +184,7 @@ public abstract class Device extends StateUserEntity {
 		if (isTraceFlag()) trace(0, "stopProcessing");
 
 		// Update the state
+		processing = false;
 		this.setBusy(false);
 		this.setPresentState();
 
@@ -187,12 +204,13 @@ public abstract class Device extends StateUserEntity {
 
 		// If the process is working, perform its next update immediately
 		if (endStepHandle.isScheduled()) {
-			EventManager.interruptEvent(endStepHandle);
+			EventManager.killEvent(endStepHandle);
+			EventManager.scheduleTicks(0L, 5, true, endStepTarget, endStepHandle);  // FIFO order
 			return;
 		}
 
 		// If the process is stopped, then restart it
-		this.startStep();
+		this.restart();
 	}
 
 	/**
@@ -202,7 +220,7 @@ public abstract class Device extends StateUserEntity {
 		if (isTraceFlag()) trace(0, "performUnscheduledUpdate");
 
 		if (!unscheduledUpdateHandle.isScheduled()) {
-			EventManager.scheduleTicks(0, 2, false, unscheduledUpdateTarget,
+			EventManager.scheduleTicks(0, 10, true, unscheduledUpdateTarget,
 					unscheduledUpdateHandle);
 		}
 	}
@@ -237,7 +255,8 @@ public abstract class Device extends StateUserEntity {
 
 		// End the present process prematurely
 		if (endStepHandle.isScheduled()) {
-			EventManager.interruptEvent(endStepHandle);
+			EventManager.killEvent(endStepHandle);
+			EventManager.scheduleTicks(0L, 5, true, endStepTarget, endStepHandle);  // FIFO order
 		}
 	}
 
@@ -321,7 +340,8 @@ public abstract class Device extends StateUserEntity {
 		// If an interrupt closure, interrupt the present activity and release the entity
 		if (isImmediateReleaseThresholdClosure()) {
 			if (endStepHandle.isScheduled()) {
-				EventManager.interruptEvent(endStepHandle);
+				EventManager.killEvent(endStepHandle);
+				EventManager.scheduleTicks(0L, 5, true, endStepTarget, endStepHandle);  // FIFO order
 			}
 			return;
 		}
@@ -333,12 +353,24 @@ public abstract class Device extends StateUserEntity {
 		}
 
 		// Otherwise, check whether processing can be restarted
-		this.startStep();
+		this.restart();
 	}
 
 	// ********************************************************************************************
 	// MAINTENANCE AND BREAKDOWNS
 	// ********************************************************************************************
+
+	public boolean isForcedDowntimePending() {
+		return forcedDowntimePending;
+	}
+
+	public boolean isImmediateDowntimePending() {
+		return immediateDowntimePending;
+	}
+
+	public boolean isReadyForDowntime() {
+		return immediateDowntimePending || forcedDowntimePending;
+	}
 
 	@Override
 	public boolean canStartDowntime(DowntimeEntity down) {
@@ -368,13 +400,13 @@ public abstract class Device extends StateUserEntity {
 
 		// For a forced downtime, set the flag to stop further processing
 		if (isForcedDowntime(down)) {
-			downtimePending = true;
+			forcedDowntimePending = true;
 			return;
 		}
 
 		// For an immediate downtime, set the flag and interrupt the present process
 		if (isImmediateDowntime(down)) {
-			downtimePending = true;
+			immediateDowntimePending = true;
 			this.performUnscheduledUpdate();
 			return;
 		}
@@ -389,7 +421,7 @@ public abstract class Device extends StateUserEntity {
 	@Override
 	public void endDowntime(DowntimeEntity down) {
 		if (isTraceFlag()) trace(0, "endDowntime(%s)", down);
-		this.startStep();
+		this.restart();
 	}
 
 }

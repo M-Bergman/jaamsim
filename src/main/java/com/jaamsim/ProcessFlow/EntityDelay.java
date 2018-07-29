@@ -28,6 +28,7 @@ import com.jaamsim.input.ColourInput;
 import com.jaamsim.input.Input;
 import com.jaamsim.input.Keyword;
 import com.jaamsim.input.ValueInput;
+import com.jaamsim.math.Color4d;
 import com.jaamsim.math.Vec3d;
 import com.jaamsim.units.DimensionlessUnit;
 import com.jaamsim.units.TimeUnit;
@@ -60,22 +61,24 @@ public class EntityDelay extends LinkedComponent {
 	{
 		stateGraphics.setHidden(false);
 
-		duration = new SampleInput("Duration", "Key Inputs", null);
+		duration = new SampleInput("Duration", KEY_INPUTS, null);
 		duration.setUnitType(TimeUnit.class);
 		duration.setEntity(this);
 		duration.setValidRange(0, Double.POSITIVE_INFINITY);
 		duration.setRequired(true);
 		this.addInput(duration);
 
-		animation = new BooleanInput("Animation", "Key Inputs", true);
+		animation = new BooleanInput("Animation", GRAPHICS, true);
 		this.addInput(animation);
 
-		widthInput = new ValueInput("Width", "Key Inputs", 1.0d);
+		widthInput = new ValueInput("Width", GRAPHICS, 1.0d);
 		widthInput.setUnitType(DimensionlessUnit.class);
 		widthInput.setValidRange(1.0d, Double.POSITIVE_INFINITY);
+		widthInput.setDefaultText("PolylineModel");
 		this.addInput(widthInput);
 
-		colorInput = new ColourInput("Color", "Key Inputs", ColourInput.BLACK);
+		colorInput = new ColourInput("Color", GRAPHICS, ColourInput.BLACK);
+		colorInput.setDefaultText("PolylineModel");
 		this.addInput(colorInput);
 		this.addSynonym(colorInput, "Colour");
 	}
@@ -194,9 +197,16 @@ public class EntityDelay extends LinkedComponent {
 
 	@Override
 	public PolylineInfo[] buildScreenPoints(double simTime) {
-		int w = Math.max(1, widthInput.getValue().intValue());
+		int wid = -1;
+		if (!widthInput.isDefault())
+			wid = Math.max(1, widthInput.getValue().intValue());
+
+		Color4d col = null;
+		if (!colorInput.isDefault())
+			col = colorInput.getValue();
+
 		PolylineInfo[] ret = new PolylineInfo[1];
-		ret[0] = new PolylineInfo(getCurvePoints(), colorInput.getValue(), w);
+		ret[0] = new PolylineInfo(getCurvePoints(), col, wid);
 		return ret;
 	}
 

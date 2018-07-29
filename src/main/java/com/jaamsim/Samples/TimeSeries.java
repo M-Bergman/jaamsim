@@ -1,6 +1,7 @@
 /*
  * JaamSim Discrete Event Simulation
  * Copyright (C) 2013 Ausenco Engineering Canada Inc.
+ * Copyright (C) 2018 JaamSim Software Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -61,16 +62,16 @@ public class TimeSeries extends DisplayEntity implements TimeSeriesProvider {
 	private final ValueInput cycleTime;
 
 	{
-		unitType = new UnitTypeInput("UnitType", "Key Inputs", UserSpecifiedUnit.class);
+		unitType = new UnitTypeInput("UnitType", KEY_INPUTS, UserSpecifiedUnit.class);
 		unitType.setRequired(true);
 		this.addInput(unitType);
 
-		value = new TimeSeriesDataInput("Value", "Key Inputs", null);
+		value = new TimeSeriesDataInput("Value", KEY_INPUTS, null);
 		value.setUnitType(UserSpecifiedUnit.class);
 		value.setRequired(true);
 		this.addInput(value);
 
-		cycleTime = new ValueInput("CycleTime", "Key Inputs", Double.POSITIVE_INFINITY);
+		cycleTime = new ValueInput("CycleTime", KEY_INPUTS, Double.POSITIVE_INFINITY);
 		cycleTime.setUnitType(TimeUnit.class);
 		this.addInput(cycleTime);
 	}
@@ -202,6 +203,10 @@ public class TimeSeries extends DisplayEntity implements TimeSeriesProvider {
 	@Override
 	public double getMeanValue(double simTime) {
 		return this.getNextSample(simTime);
+	}
+
+	public boolean isMonotonic(int dir) {
+		return value.getValue().isMonotonic(dir);
 	}
 
 	/**

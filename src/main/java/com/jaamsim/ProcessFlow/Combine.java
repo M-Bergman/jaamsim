@@ -51,21 +51,23 @@ public class Combine extends LinkedService {
 		waitQueue.setHidden(true);
 		match.setHidden(true);
 
-		serviceTime = new SampleInput("ServiceTime", "Key Inputs", new SampleConstant(TimeUnit.class, 0.0));
+		serviceTime = new SampleInput("ServiceTime", KEY_INPUTS, new SampleConstant(TimeUnit.class, 0.0));
 		serviceTime.setUnitType(TimeUnit.class);
 		serviceTime.setEntity(this);
 		serviceTime.setValidRange(0, Double.POSITIVE_INFINITY);
 		this.addInput(serviceTime);
 
-		waitQueueList = new EntityListInput<>(Queue.class, "WaitQueueList", "Key Inputs", null);
+		waitQueueList = new EntityListInput<>(Queue.class, "WaitQueueList", KEY_INPUTS, null);
 		waitQueueList.setRequired(true);
 		this.addInput(waitQueueList);
 
-		retainAll = new BooleanInput("RetainAll", "Key Inputs", false);
+		retainAll = new BooleanInput("RetainAll", KEY_INPUTS, false);
 		this.addInput(retainAll);
 	}
 
-	public Combine() {}
+	public Combine() {
+		processedEntityList = new DisplayEntity[1];
+	}
 
 	@Override
 	public void earlyInit() {
@@ -118,7 +120,6 @@ public class Combine extends LinkedService {
 			}
 
 			this.registerEntity(ent);
-			this.moveToProcessPosition(ent);
 			processedEntityList[i] = ent;
 		}
 
@@ -132,12 +133,14 @@ public class Combine extends LinkedService {
 		if (retainAll.getValue()) {
 			for (int i=0; i<processedEntityList.length; i++) {
 				this.sendToNextComponent(processedEntityList[i]);
+				processedEntityList[i] = null;
 			}
 		}
 
 		// Otherwise, send just the first one
 		else {
 			this.sendToNextComponent(processedEntityList[0]);
+			processedEntityList[0] = null;
 		}
 
 		return true;
@@ -146,6 +149,13 @@ public class Combine extends LinkedService {
 	@Override
 	protected double getStepDuration(double simTime) {
 		return serviceTime.getValue().getNextSample(simTime);
+	}
+
+	@Override
+	public void updateGraphics(double simTime) {
+		if (processedEntityList[0] == null)
+			return;
+		moveToProcessPosition(processedEntityList[0]);
 	}
 
 }

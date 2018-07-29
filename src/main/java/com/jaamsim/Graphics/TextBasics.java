@@ -44,13 +44,13 @@ import com.jogamp.newt.event.KeyEvent;
  */
 public abstract class TextBasics extends DisplayEntity {
 
-	@Keyword(description = "The height of the font as displayed in the view window.",
-	         exampleList = {"15 m"})
-	protected final ValueInput textHeight;
-
 	@Keyword(description = "The font to be used for the text.",
 	         exampleList = { "Arial" })
 	private final StringChoiceInput fontName;
+
+	@Keyword(description = "The height of the font as displayed in the view window.",
+	         exampleList = {"15 m"})
+	protected final ValueInput textHeight;
 
 	@Keyword(description = "The font styles to be applied to the text, e.g. Bold, Italic. ",
 	         exampleList = { "Bold" })
@@ -80,37 +80,39 @@ public abstract class TextBasics extends DisplayEntity {
 	private int numSelected = 0;       // number of characters selected (positive to the right of the insertion position)
 
 	{
-		textHeight = new ValueInput("TextHeight", "Key Inputs", 0.3d);
-		textHeight.setValidRange(0.0d, Double.POSITIVE_INFINITY);
-		textHeight.setUnitType(DistanceUnit.class);
-		this.addInput(textHeight);
 
-		fontName = new StringChoiceInput("FontName", "Font", -1);
+		fontName = new StringChoiceInput("FontName", FONT, -1);
 		fontName.setChoices(TextModel.validFontNames);
 		fontName.setDefaultText("TextModel");
 		this.addInput(fontName);
 
-		fontColor = new ColourInput("FontColour", "Font", ColourInput.BLACK);
+		textHeight = new ValueInput("TextHeight", FONT, 0.3d);
+		textHeight.setValidRange(0.0d, Double.POSITIVE_INFINITY);
+		textHeight.setUnitType(DistanceUnit.class);
+		textHeight.setDefaultText("TextModel");
+		this.addInput(textHeight);
+
+		fontColor = new ColourInput("FontColour", FONT, ColourInput.BLACK);
 		fontColor.setDefaultText("TextModel");
 		this.addInput(fontColor);
 		this.addSynonym(fontColor, "FontColor");
 
-		fontStyle = new StringListInput("FontStyle", "Font", new ArrayList<String>(0));
+		fontStyle = new StringListInput("FontStyle", FONT, new ArrayList<String>(0));
 		fontStyle.setValidOptions(TextModel.validStyles);
 		fontStyle.setCaseSensitive(false);
 		fontStyle.setDefaultText("TextModel");
 		this.addInput(fontStyle);
 
-		dropShadow = new BooleanInput("DropShadow", "Font", false);
+		dropShadow = new BooleanInput("DropShadow", FONT, false);
 		dropShadow.setDefaultText("TextModel");
 		this.addInput(dropShadow);
 
-		dropShadowColor = new ColourInput("DropShadowColour", "Font", ColourInput.BLACK);
+		dropShadowColor = new ColourInput("DropShadowColour", FONT, ColourInput.BLACK);
 		dropShadowColor.setDefaultText("TextModel");
 		this.addInput(dropShadowColor);
 		this.addSynonym(dropShadowColor, "DropShadowColor");
 
-		dropShadowOffset = new Vec3dInput("DropShadowOffset", "Font", null);
+		dropShadowOffset = new Vec3dInput("DropShadowOffset", FONT, null);
 		dropShadowOffset.setDefaultText("TextModel");
 		this.addInput(dropShadowOffset);
 	}
@@ -388,17 +390,17 @@ public abstract class TextBasics extends DisplayEntity {
 		return savedText;
 	}
 
-	public double getTextHeight() {
-		return textHeight.getValue().doubleValue();
-	}
-
 	public Vec3d getTextSize() {
 		double height = textHeight.getValue();
 		TextModel tm = (TextModel) displayModelListInput.getValue().get(0);
+		if (textHeight.isDefault())
+			height = tm.getTextHeight();
 		return RenderManager.inst().getRenderedStringSize(tm.getTessFontKey(), height, savedText);
-		}
+	}
 
 	public void resizeForText() {
+		if (!RenderManager.isGood())
+			return;
 		Vec3d textSize = getTextSize();
 		double length = textSize.x + textSize.y;
 		double height = 2.0 * textSize.y;
@@ -420,6 +422,10 @@ public abstract class TextBasics extends DisplayEntity {
 
 	public StringChoiceInput getFontNameInput() {
 		return fontName;
+	}
+
+	public ValueInput getTextHeightInput() {
+		return textHeight;
 	}
 
 	public StringListInput getFontStyleInput() {

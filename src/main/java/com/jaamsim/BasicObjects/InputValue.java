@@ -16,8 +16,6 @@
  */
 package com.jaamsim.BasicObjects;
 
-import java.util.ArrayList;
-
 import com.jaamsim.Commands.KeywordCommand;
 import com.jaamsim.Graphics.TextBasics;
 import com.jaamsim.Samples.SampleProvider;
@@ -27,7 +25,6 @@ import com.jaamsim.input.InputErrorException;
 import com.jaamsim.input.Keyword;
 import com.jaamsim.input.KeywordIndex;
 import com.jaamsim.input.Output;
-import com.jaamsim.input.Parser;
 import com.jaamsim.input.UnitTypeInput;
 import com.jaamsim.input.ValueInput;
 import com.jaamsim.ui.GUIFrame;
@@ -47,11 +44,11 @@ public class InputValue extends TextBasics implements SampleProvider {
 	private boolean suppressUpdate = false; // prevents the white space in the edited text from changing
 
 	{
-		unitType = new UnitTypeInput("UnitType", "Key Inputs", UserSpecifiedUnit.class);
+		unitType = new UnitTypeInput("UnitType", KEY_INPUTS, UserSpecifiedUnit.class);
 		unitType.setRequired(true);
 		this.addInput(unitType);
 
-		valInput = new ValueInput("Value", "Key Inputs", 0.0d);
+		valInput = new ValueInput("Value", KEY_INPUTS, 0.0d);
 		valInput.setUnitType(UserSpecifiedUnit.class);
 		this.addInput(valInput);
 	}
@@ -89,9 +86,7 @@ public class InputValue extends TextBasics implements SampleProvider {
 	public void acceptEdits() {
 		try {
 			suppressUpdate = true;
-			ArrayList<String> tokens = new ArrayList<>();
-			Parser.tokenize(tokens, getEditText(), true);
-			KeywordIndex kw = new KeywordIndex(valInput.getKeyword(), tokens, null);
+			KeywordIndex kw = InputAgent.formatInput(valInput.getKeyword(), getEditText());
 			InputAgent.storeAndExecute(new KeywordCommand(this, kw));
 			super.acceptEdits();
 		}

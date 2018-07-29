@@ -1,7 +1,7 @@
 /*
  * JaamSim Discrete Event Simulation
  * Copyright (C) 2015 Ausenco Engineering Canada Inc.
- * Copyright (C) 2016 JaamSim Software Inc.
+ * Copyright (C) 2016-2018 JaamSim Software Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +18,9 @@
 package com.jaamsim.ProbabilityDistributions;
 
 import com.jaamsim.Samples.SampleConstant;
+import com.jaamsim.Samples.TimeSeries;
 import com.jaamsim.events.EventManager;
+import com.jaamsim.input.InputErrorException;
 import com.jaamsim.input.Keyword;
 import com.jaamsim.input.TimeSeriesInput;
 import com.jaamsim.rng.MRG1999a;
@@ -31,7 +33,8 @@ import com.jaamsim.units.TimeUnit;
  */
 public class NonStatExponentialDist extends Distribution {
 
-	@Keyword(description = "A time series containing the expected cumulative number of arrivals as a function of time.",
+	@Keyword(description = "A time series containing the expected cumulative number of arrivals "
+	                     + "as a function of time.",
 			exampleList = {"TimeSeries1"})
 	private final TimeSeriesInput expectedArrivals;
 
@@ -44,13 +47,32 @@ public class NonStatExponentialDist extends Distribution {
 		unitType.setDefaultValue(TimeUnit.class);
 		this.setUnitType(TimeUnit.class);
 
-		expectedArrivals = new TimeSeriesInput("ExpectedArrivals", "Key Inputs", null);
+		expectedArrivals = new TimeSeriesInput("ExpectedArrivals", KEY_INPUTS, null);
 		expectedArrivals.setUnitType(DimensionlessUnit.class);
 		expectedArrivals.setRequired(true);
 		this.addInput(expectedArrivals);
 	}
 
 	public NonStatExponentialDist() {}
+
+	@Override
+	public void validate() {
+		super.validate();
+
+		if (!(expectedArrivals.getValue() instanceof TimeSeries))
+			throw new InputErrorException("The ExpectedArrivals input must be a TimeSeries, "
+					+ "not a constant.");
+
+		TimeSeries ts = (TimeSeries) (expectedArrivals.getValue());
+
+		if (!ts.isMonotonic(1))
+			throw new InputErrorException("The ExpectedArrivals input must be a TimeSeries "
+					+ "that increases monotonically.");
+
+		if (ts.getMinValue() != 0.0d)
+			throw new InputErrorException("The ExpectedArrivals input must be a TimeSeries "
+					+ "that starts with zero expected arrivals at time zero.");
+	}
 
 	@Override
 	public void earlyInit() {

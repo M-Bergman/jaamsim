@@ -39,14 +39,14 @@ public class Release extends LinkedComponent {
 	private final SampleListInput numberOfUnitsList;
 
 	{
-		resourceList = new EntityListInput<>(Resource.class, "ResourceList", "Key Inputs", null);
+		resourceList = new EntityListInput<>(Resource.class, "ResourceList", KEY_INPUTS, null);
 		resourceList.setRequired(true);
 		this.addInput( resourceList);
 		this.addSynonym(resourceList, "Resource");
 
 		ArrayList<SampleProvider> def = new ArrayList<>();
 		def.add(new SampleConstant(1));
-		numberOfUnitsList = new SampleListInput("NumberOfUnits", "Key Inputs", def);
+		numberOfUnitsList = new SampleListInput("NumberOfUnits", KEY_INPUTS, def);
 		numberOfUnitsList.setEntity(this);
 		numberOfUnitsList.setValidRange(1, Double.POSITIVE_INFINITY);
 		numberOfUnitsList.setDimensionless(true);
@@ -82,10 +82,8 @@ public class Release extends LinkedComponent {
 			resList.get(i).release(n);
 		}
 
-		// Notify any Seize objects that are waiting for these Resources
-		for(int i=0; i<resList.size(); i++) {
-			resList.get(i).notifySeizeObjects();
-		}
+		// Notify any resource users that are waiting for these Resources
+		Resource.notifyResourceUsers(resList);
 	}
 
 }

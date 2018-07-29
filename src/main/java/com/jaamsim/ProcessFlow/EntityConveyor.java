@@ -1,7 +1,7 @@
 /*
  * JaamSim Discrete Event Simulation
  * Copyright (C) 2013 Ausenco Engineering Canada Inc.
- * Copyright (C) 2016 JaamSim Software Inc.
+ * Copyright (C) 2016-2018 JaamSim Software Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,6 +27,7 @@ import com.jaamsim.input.ColourInput;
 import com.jaamsim.input.Input;
 import com.jaamsim.input.Keyword;
 import com.jaamsim.input.ValueInput;
+import com.jaamsim.math.Color4d;
 import com.jaamsim.math.MathUtils;
 import com.jaamsim.math.Vec3d;
 import com.jaamsim.units.DimensionlessUnit;
@@ -60,18 +61,20 @@ public class EntityConveyor extends LinkedService {
 		forcedMaintenanceList.setHidden(true);
 		forcedBreakdownList.setHidden(true);
 
-		travelTimeInput = new SampleInput("TravelTime", "Key Inputs", new SampleConstant(0.0d));
+		travelTimeInput = new SampleInput("TravelTime", KEY_INPUTS, new SampleConstant(0.0d));
 		travelTimeInput.setValidRange(0.0, Double.POSITIVE_INFINITY);
 		travelTimeInput.setUnitType(TimeUnit.class);
 		travelTimeInput.setEntity(this);
 		this.addInput(travelTimeInput);
 
-		widthInput = new ValueInput("Width", "Key Inputs", 1.0d);
+		widthInput = new ValueInput("Width", GRAPHICS, 1.0d);
 		widthInput.setUnitType(DimensionlessUnit.class);
 		widthInput.setValidRange(1.0d, Double.POSITIVE_INFINITY);
+		widthInput.setDefaultText("PolylineModel");
 		this.addInput(widthInput);
 
-		colorInput = new ColourInput("Color", "Key Inputs", ColourInput.BLACK);
+		colorInput = new ColourInput("Color", GRAPHICS, ColourInput.BLACK);
+		colorInput.setDefaultText("PolylineModel");
 		this.addInput(colorInput);
 		this.addSynonym(colorInput, "Colour");
 	}
@@ -124,7 +127,7 @@ public class EntityConveyor extends LinkedService {
 		entryList.add(entry);
 
 		// If necessary, wake up the conveyor
-		this.startStep();
+		this.restart();
 	}
 
 	@Override
@@ -135,14 +138,20 @@ public class EntityConveyor extends LinkedService {
 	@Override
 	protected boolean processStep(double simTime) {
 
-		// Remove the entity from the conveyor
-		DisplayEntity ent = entryList.remove(0).entity;
+		// Remove the first entity from the conveyor and send it to the next component
+		ConveyorEntry entry = entryList.remove(0);
+		DisplayEntity ent = entry.entity;
+		this.sendToNextComponent(ent);
+
+		// Remove any other entities that have also reached the end
+		double maxPos = Math.min(entry.position, 1.0d);
+		while (!entryList.isEmpty() && entryList.get(0).position >= maxPos) {
+			ent = entryList.remove(0).entity;
+			this.sendToNextComponent(ent);
+		}
 
 		// Update the travel time
 		this.updateTravelTime(simTime);
-
-		// Send the entity to the next component
-		this.sendToNextComponent(ent);
 
 		return true;
 	}
@@ -197,6 +206,16 @@ public class EntityConveyor extends LinkedService {
 		}
 	}
 
+	@Override
+	public void thresholdChanged() {
+		if (isImmediateReleaseThresholdClosure()) {
+			for (ConveyorEntry entry : entryList) {
+				entry.position = 1.0d;
+			}
+		}
+		super.thresholdChanged();
+	}
+
 	// ********************************************************************************************
 	// GRAPHICS
 	// ********************************************************************************************
@@ -215,11 +234,14 @@ public class EntityConveyor extends LinkedService {
 	@Override
 	public void updateGraphics(double simTime) {
 
-		if (!this.isBusy() || presentTravelTime == 0.0d || !usePointsInput())
+		if (presentTravelTime == 0.0d || !usePointsInput())
 			return;
 
 		// Move each entity on the conveyor to its present position
-		double frac = (simTime - this.getLastUpdateTime())/presentTravelTime;
+		double frac = 0.0d;
+		if (isBusy()) {
+			frac = (simTime - this.getLastUpdateTime())/presentTravelTime;
+		}
 		for (int i=0; i<entryList.size(); i++) {
 			ConveyorEntry entry = entryList.get(i);
 			Vec3d localPos = PolylineInfo.getPositionOnPolyline(getCurvePoints(), entry.position + frac);
@@ -229,9 +251,16 @@ public class EntityConveyor extends LinkedService {
 
 	@Override
 	public PolylineInfo[] buildScreenPoints(double simTime) {
-		int w = Math.max(1, widthInput.getValue().intValue());
+		int wid = -1;
+		if (!widthInput.isDefault())
+			wid = Math.max(1, widthInput.getValue().intValue());
+
+		Color4d col = null;
+		if (!colorInput.isDefault())
+			col = colorInput.getValue();
+
 		PolylineInfo[] ret = new PolylineInfo[1];
-		ret[0] = new PolylineInfo(getCurvePoints(), colorInput.getValue(), w);
+		ret[0] = new PolylineInfo(getCurvePoints(), col, wid);
 		return ret;
 	}
 

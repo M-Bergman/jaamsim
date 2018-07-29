@@ -33,6 +33,8 @@ import java.awt.datatransfer.Clipboard;
 import java.awt.datatransfer.StringSelection;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
 import java.awt.event.FocusEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
@@ -233,6 +235,13 @@ public class GUIFrame extends OSFixJFrame implements EventTimeListener, EventErr
 		setProgress( 0 );
 		ToolTipManager.sharedInstance().setLightWeightPopupEnabled( false );
 		JPopupMenu.setDefaultLightWeightPopupEnabled( false );
+
+		addComponentListener(new ComponentAdapter() {
+			@Override
+			public void componentResized(ComponentEvent e) {
+				Simulation.setControlPanelWidth(getSize().width);
+			}
+		});
 	}
 
 	@Override
@@ -551,6 +560,7 @@ public class GUIFrame extends OSFixJFrame implements EventTimeListener, EventErr
 		JMenuItem objectPalletMenuItem = new JMenuItem( "Model Builder" );
 		objectPalletMenuItem.setMnemonic( 'O' );
 		objectPalletMenuItem.addActionListener(new SimulationMenuAction("ShowModelBuilder", "TRUE"));
+		viewMenu.addSeparator();
 		viewMenu.add( objectPalletMenuItem );
 
 		// 4) "Object Selector" menu item
@@ -588,6 +598,18 @@ public class GUIFrame extends OSFixJFrame implements EventTimeListener, EventErr
 		eventsMenuItem.setMnemonic( 'E' );
 		eventsMenuItem.addActionListener(new SimulationMenuAction("ShowEventViewer", "TRUE"));
 		viewMenu.add( eventsMenuItem );
+
+		// 10) "Reset Positions and Sizes" menu item
+		JMenuItem resetItem = new JMenuItem( "Reset Positions and Sizes" );
+		resetItem.setMnemonic( 'R' );
+		resetItem.addActionListener(new ActionListener() {
+			@Override
+			public void actionPerformed( ActionEvent e ) {
+				Simulation.resetWindowPositionsAndSizes();
+			}
+		} );
+		viewMenu.addSeparator();
+		viewMenu.add( resetItem );
 	}
 
 	private static final class SimulationMenuAction implements ActionListener {
@@ -803,7 +825,7 @@ public class GUIFrame extends OSFixJFrame implements EventTimeListener, EventErr
 
 			@Override
 			public void actionPerformed( ActionEvent event ) {
-				JPopupMenu menu = new JPopupMenu("UndoMenu");
+				ScrollablePopupMenu menu = new ScrollablePopupMenu("UndoMenu");
 				ArrayList<Command> list = InputAgent.getUndoList();
 				for (int i = 1; i <= list.size(); i++) {
 					Command cmd = list.get(list.size() - i);
@@ -847,7 +869,7 @@ public class GUIFrame extends OSFixJFrame implements EventTimeListener, EventErr
 
 			@Override
 			public void actionPerformed( ActionEvent event ) {
-				JPopupMenu menu = new JPopupMenu("RedoMenu");
+				ScrollablePopupMenu menu = new ScrollablePopupMenu("RedoMenu");
 				ArrayList<Command> list = InputAgent.getRedoList();
 				for (int i = 1; i <= list.size(); i++) {
 					Command cmd = list.get(list.size() - i);
@@ -1040,8 +1062,14 @@ public class GUIFrame extends OSFixJFrame implements EventTimeListener, EventErr
 				JToggleButton startResume = (JToggleButton)event.getSource();
 				startResume.setEnabled(false);
 				if(startResume.isSelected()) {
-					GUIFrame.this.startSimulation();
-					controlStartResume.setPressedIcon(pausePressedIcon);
+					boolean bool = GUIFrame.this.startSimulation();
+					if (bool) {
+						controlStartResume.setPressedIcon(pausePressedIcon);
+					}
+					else {
+						startResume.setSelected(false);
+						startResume.setEnabled(true);
+					}
 				}
 				else {
 					GUIFrame.this.pauseSimulation();
@@ -1279,11 +1307,29 @@ public class GUIFrame extends OSFixJFrame implements EventTimeListener, EventErr
 		@Override
 		public void menuSelected(MenuEvent e) {
 
+			// 1) Select from the available view windows
 			for (View view : View.getAll()) {
 				this.add(new NewRenderWindowLauncher(view));
 			}
+
+			// 2) "Define New View" menu item
 			this.addSeparator();
 			this.add(new ViewDefiner());
+
+			// 3) "Reset Positions and Sizes" menu item
+			JMenuItem resetItem = new JMenuItem( "Reset Positions and Sizes" );
+			resetItem.setMnemonic( 'R' );
+			resetItem.addActionListener(new ActionListener() {
+				@Override
+				public void actionPerformed( ActionEvent e ) {
+					for (View v : View.getAll()) {
+						InputAgent.applyArgs(v, "WindowPosition");
+						InputAgent.applyArgs(v, "WindowSize");
+					}
+				}
+			} );
+			this.addSeparator();
+			this.add(resetItem);
 		}
 
 		@Override
@@ -1470,16 +1516,22 @@ public class GUIFrame extends OSFixJFrame implements EventTimeListener, EventErr
 
 	/**
 	 * Starts or resumes the simulation run.
+	 * @return true if the simulation was started or resumed; false if cancel or close was selected
 	 */
-	public void startSimulation() {
+	public boolean startSimulation() {
 		if( getSimState() <= SIM_STATE_CONFIGURED ) {
+			boolean confirmed = true;
 			if (InputAgent.isSessionEdited()) {
-				this.saveAs();
+				confirmed = GUIFrame.showSaveChangesDialog(this);
 			}
-			Simulation.start(currentEvt);
+			if (confirmed) {
+				Simulation.start(currentEvt);
+			}
+			return confirmed;
 		}
 		else if( getSimState() == SIM_STATE_PAUSED ) {
 			currentEvt.resume(currentEvt.secondsToNearestTick(Simulation.getPauseTime()));
+			return true;
 		}
 		else
 			throw new ErrorException( "Invalid Simulation State for Start/Resume" );
@@ -1556,6 +1608,8 @@ public class GUIFrame extends OSFixJFrame implements EventTimeListener, EventErr
 					fileMenu.getItem(i).setEnabled(true);
 				}
 				for( int i = 0; i < viewMenu.getItemCount(); i++ ) {
+					if (viewMenu.getItem(i) == null)
+						continue;
 					viewMenu.getItem(i).setEnabled(true);
 				}
 
@@ -1579,6 +1633,8 @@ public class GUIFrame extends OSFixJFrame implements EventTimeListener, EventErr
 					fileMenu.getItem(i).setEnabled(true);
 				}
 				for( int i = 0; i < viewMenu.getItemCount(); i++ ) {
+					if (viewMenu.getItem(i) == null)
+						continue;
 					viewMenu.getItem(i).setEnabled(true);
 				}
 
@@ -1601,6 +1657,8 @@ public class GUIFrame extends OSFixJFrame implements EventTimeListener, EventErr
 					fileMenu.getItem(i).setEnabled(true);
 				}
 				for( int i = 0; i < viewMenu.getItemCount(); i++ ) {
+					if (viewMenu.getItem(i) == null)
+						continue;
 					viewMenu.getItem(i).setEnabled(true);
 				}
 
@@ -1953,6 +2011,7 @@ public class GUIFrame extends OSFixJFrame implements EventTimeListener, EventErr
 			gui.setVisible(true);
 			gui.calcWindowDefaults();
 			gui.setLocation(gui.getX(), gui.getY());  //FIXME remove when setLocation is fixed for Windows 10
+			Simulation.setWindowDefaults();
 		}
 
 		// Resolve all input arguments against the current working directory
@@ -2637,12 +2696,13 @@ public class GUIFrame extends OSFixJFrame implements EventTimeListener, EventErr
 	 * @return HTML for the tooltip
 	 */
 	public static String formatKeywordToolTip(String className, String keyword,
-			String description, String validInputs, String[] exampleList) {
+			String description, String validInputs, String... exampleList) {
 
 		StringBuilder sb = new StringBuilder("<html><p width=\"350px\">");
 
 		// Keyword name
-		sb.append("<b>").append(keyword).append("</b><br>");
+		String key = html_replace(keyword);
+		sb.append("<b>").append(key).append("</b><br>");
 
 		// Description
 		String desc = html_replace(description);
@@ -2654,7 +2714,9 @@ public class GUIFrame extends OSFixJFrame implements EventTimeListener, EventErr
 		}
 
 		// Examples
-		sb.append("<u>Examples:</u>");
+		if (exampleList.length > 0) {
+			sb.append("<u>Examples:</u>");
+		}
 		for (int i=0; i<exampleList.length; i++) {
 			String item = html_replace(exampleList[i]);
 			sb.append("<br>").append(item);

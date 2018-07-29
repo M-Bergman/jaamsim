@@ -1,7 +1,7 @@
 /*
  * JaamSim Discrete Event Simulation
  * Copyright (C) 2002-2011 Ausenco Engineering Canada Inc.
- * Copyright (C) 2016-2017 JaamSim Software Inc.
+ * Copyright (C) 2016-2018 JaamSim Software Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -35,6 +35,7 @@ import com.jaamsim.input.DirInput;
 import com.jaamsim.input.EntityListInput;
 import com.jaamsim.input.Input;
 import com.jaamsim.input.InputAgent;
+import com.jaamsim.input.IntegerInput;
 import com.jaamsim.input.IntegerListInput;
 import com.jaamsim.input.Keyword;
 import com.jaamsim.input.Output;
@@ -56,7 +57,6 @@ import com.jaamsim.units.DimensionlessUnit;
 import com.jaamsim.units.DistanceUnit;
 import com.jaamsim.units.TimeUnit;
 import com.jaamsim.units.Unit;
-import com.jaamsim.units.UserSpecifiedUnit;
 
 /**
  * Simulation provides the basic structure for the Entity model lifetime of earlyInit,
@@ -118,7 +118,13 @@ public class Simulation extends Entity {
 	private static final DirInput reportDirectory;
 
 	@Keyword(description = "The unit types for the selected outputs for the simulation run. "
-	                     + "Use DimensionlessUnit for a text output.",
+	                     + "Use DimensionlessUnit for non-numeric outputs such as strings, "
+	                     + "entities, and arrays. "
+	                     + "If the RunOutputList keyword has more entries than the UnitTypesList "
+	                     + "keyword, then the last unit type in the list is applied to the "
+	                     + "remaining RunOutputList entries.\n\n"
+	                     + "It is best to leave this input blank and use only dimensionless "
+	                     + "quantities and non-numeric outputs in the RunOutputList.",
 	         exampleList = {"DistanceUnit  SpeedUnit"})
 	private static final UnitTypeListInput unitTypeList;
 
@@ -126,8 +132,16 @@ public class Simulation extends Entity {
 	                     + "simulation run. Each output is specified by an expression. In script "
 	                     + "mode (-s tag), the selected outputs are printed to the command line "
 	                     + "(standard out). Otherwise, they are printed to the file "
-	                     + "<configuration file name>.dat.",
-	         exampleList = {"{ [Entity1].Out1 } { [Entity2].Out2 }"})
+	                     + "<configuration file name>.dat.\n\n"
+	                     + "It is best to include only dimensionless quantities and non-numeric "
+	                     + "outputs in the RunOutputList. "
+	                     + "An output with dimensions can be made non-dimensional by dividing it "
+	                     + "by 1 in the desired unit, e.g. '[Queue1].AverageQueueTime / 1[h]' is "
+	                     + "the average queue time in hours.\n\n"
+	                     + "If a number with dimensions is to be recorded, its unit type must "
+	                     + "first be entered in the correct position in the input to the "
+	                     + "UnitTypeList keyword.",
+	         exampleList = {"{ [Simulation].RunNumber } { '[Queue1].AverageQueueTime / 1[h]' }"})
 	protected static final StringProvListInput runOutputList;
 
 	@Keyword(description = "The length of time represented by one simulation tick.",
@@ -225,6 +239,73 @@ public class Simulation extends Entity {
 	         exampleList = {"TRUE"})
 	private static final BooleanInput showEventViewer;
 
+	@Keyword(description = "The position of the upper left corner of the Model Builder window "
+	                     + "in pixels measured from the top left corner of the screen.",
+	         exampleList = {"220 110"})
+	private static final IntegerListInput modelBuilderPos;
+
+	@Keyword(description = "The size of the Model Builder window in pixels (width, height).",
+	         exampleList = {"500 300"})
+	private static final IntegerListInput modelBuilderSize;
+
+	@Keyword(description = "The position of the upper left corner of the Object Selector window "
+	                     + "in pixels measured from the top left corner of the screen.",
+	         exampleList = {"220 110"})
+	private static final IntegerListInput objectSelectorPos;
+
+	@Keyword(description = "The size of the Object Selector window in pixels (width, height).",
+	         exampleList = {"500 300"})
+	private static final IntegerListInput objectSelectorSize;
+
+	@Keyword(description = "The position of the upper left corner of the Input Editor window "
+	                     + "in pixels measured from the top left corner of the screen.",
+	         exampleList = {"220 110"})
+	private static final IntegerListInput inputEditorPos;
+
+	@Keyword(description = "The size of the Input Editor window in pixels (width, height).",
+	         exampleList = {"500 300"})
+	private static final IntegerListInput inputEditorSize;
+
+	@Keyword(description = "The position of the upper left corner of the Output Viewer window "
+	                     + "in pixels measured from the top left corner of the screen.",
+	         exampleList = {"220 110"})
+	private static final IntegerListInput outputViewerPos;
+
+	@Keyword(description = "The size of the Output Viewer window in pixels (width, height).",
+	         exampleList = {"500 300"})
+	private static final IntegerListInput outputViewerSize;
+
+	@Keyword(description = "The position of the upper left corner of the Property Viewer window "
+	                     + "in pixels measured from the top left corner of the screen.",
+	         exampleList = {"220 110"})
+	private static final IntegerListInput propertyViewerPos;
+
+	@Keyword(description = "The size of the Property Viewer window in pixels (width, height).",
+	         exampleList = {"500 300"})
+	private static final IntegerListInput propertyViewerSize;
+
+	@Keyword(description = "The position of the upper left corner of the Log Viewer window "
+	                     + "in pixels measured from the top left corner of the screen.",
+	         exampleList = {"220 110"})
+	private static final IntegerListInput logViewerPos;
+
+	@Keyword(description = "The size of the Log Viewer window in pixels (width, height).",
+	         exampleList = {"500 300"})
+	private static final IntegerListInput logViewerSize;
+
+	@Keyword(description = "The position of the upper left corner of the Event Viewer window "
+	                     + "in pixels measured from the top left corner of the screen.",
+	         exampleList = {"220 110"})
+	private static final IntegerListInput eventViewerPos;
+
+	@Keyword(description = "The size of the Event Viewer window in pixels (width, height).",
+	         exampleList = {"500 300"})
+	private static final IntegerListInput eventViewerSize;
+
+	@Keyword(description = "The width of the Control Panel window in pixels.",
+	         exampleList = {"1920"})
+	private static final IntegerInput controlPanelWidth;
+
 	@Keyword(description = "Time at which the simulation run is started (hh:mm).",
 	         exampleList = {"2160 h"})
 	private static final ValueInput startTimeInput;
@@ -256,120 +337,209 @@ public class Simulation extends Entity {
 	static {
 
 		// Key Inputs tab
-		runDuration = new ValueInput("RunDuration", "Key Inputs", 31536000.0d);
+		runDuration = new ValueInput("RunDuration", KEY_INPUTS, 31536000.0d);
 		runDuration.setUnitType(TimeUnit.class);
 		runDuration.setValidRange(1e-15d, Double.POSITIVE_INFINITY);
 
-		initializationTime = new ValueInput("InitializationDuration", "Key Inputs", 0.0);
+		initializationTime = new ValueInput("InitializationDuration", KEY_INPUTS, 0.0);
 		initializationTime.setUnitType(TimeUnit.class);
 		initializationTime.setValidRange(0.0d, Double.POSITIVE_INFINITY);
 
-		pauseConditionInput = new SampleInput("PauseCondition", "Key Inputs", null);
+		pauseConditionInput = new SampleInput("PauseCondition", KEY_INPUTS, null);
 		pauseConditionInput.setUnitType(DimensionlessUnit.class);
 
-		exitAtPauseCondition = new BooleanInput("ExitAtPauseCondition", "Key Inputs", false);
+		exitAtPauseCondition = new BooleanInput("ExitAtPauseCondition", KEY_INPUTS, false);
 
-		exitAtStop = new BooleanInput("ExitAtStop", "Key Inputs", false);
+		exitAtStop = new BooleanInput("ExitAtStop", KEY_INPUTS, false);
 
-		globalSeedInput = new SampleInput("GlobalSubstreamSeed", "Key Inputs", new SampleConstant(0));
+		globalSeedInput = new SampleInput("GlobalSubstreamSeed", KEY_INPUTS, new SampleConstant(0));
 		globalSeedInput.setUnitType(DimensionlessUnit.class);
 		globalSeedInput.setValidRange(0, Integer.MAX_VALUE);
 
-		printReport = new BooleanInput("PrintReport", "Key Inputs", false);
+		printReport = new BooleanInput("PrintReport", KEY_INPUTS, false);
 
-		reportDirectory = new DirInput("ReportDirectory", "Key Inputs", null);
+		reportDirectory = new DirInput("ReportDirectory", KEY_INPUTS, null);
 		reportDirectory.setDefaultText("Configuration File Directory");
 
-		unitTypeList = new UnitTypeListInput("UnitTypeList", "Key Inputs", null);
+		unitTypeList = new UnitTypeListInput("UnitTypeList", KEY_INPUTS, null);
 
-		runOutputList = new StringProvListInput("RunOutputList", "Key Inputs", null);
-		runOutputList.setUnitType(UserSpecifiedUnit.class);
+		runOutputList = new StringProvListInput("RunOutputList", KEY_INPUTS, null);
+		runOutputList.setUnitType(DimensionlessUnit.class);
 
-		tickLengthInput = new ValueInput("TickLength", "Key Inputs", 1e-6d);
+		tickLengthInput = new ValueInput("TickLength", KEY_INPUTS, 1e-6d);
 		tickLengthInput.setUnitType(TimeUnit.class);
-		tickLengthInput.setValidRange(1e-9d, 5.0d);
+		tickLengthInput.setValidRange(1e-12d, Double.POSITIVE_INFINITY);
 
 		// Multiple Runs tab
 		IntegerVector defRangeList = new IntegerVector();
 		defRangeList.add(1);
-		runIndexDefinitionList = new IntegerListInput("RunIndexDefinitionList", "Multiple Runs", defRangeList);
+		runIndexDefinitionList = new IntegerListInput("RunIndexDefinitionList", MULTIPLE_RUNS, defRangeList);
 
-		startingRunNumber = new RunNumberInput("StartingRunNumber", "Multiple Runs", 1);
+		startingRunNumber = new RunNumberInput("StartingRunNumber", MULTIPLE_RUNS, 1);
 
-		endingRunNumber = new RunNumberInput("EndingRunNumber", "Multiple Runs", 1);
+		endingRunNumber = new RunNumberInput("EndingRunNumber", MULTIPLE_RUNS, 1);
 
 		// GUI tab
-		displayedUnits = new EntityListInput<>(Unit.class, "DisplayedUnits", "GUI", new ArrayList<Unit>());
+		displayedUnits = new EntityListInput<>(Unit.class, "DisplayedUnits", GUI, new ArrayList<Unit>());
 		displayedUnits.setDefaultText("SI Units");
 		displayedUnits.setPromptReqd(false);
 		displayedUnits.setHidden(true);
 
-		realTime = new BooleanInput("RealTime", "GUI", false);
+		realTime = new BooleanInput("RealTime", GUI, false);
 		realTime.setPromptReqd(false);
 		realTime.setHidden(true);
 
-		snapToGrid = new BooleanInput("SnapToGrid", "GUI", false);
+		snapToGrid = new BooleanInput("SnapToGrid", GUI, false);
 		snapToGrid.setPromptReqd(false);
 		snapToGrid.setHidden(true);
 
-		snapGridSpacing = new ValueInput("SnapGridSpacing", "GUI", 0.1d);
+		snapGridSpacing = new ValueInput("SnapGridSpacing", GUI, 0.1d);
 		snapGridSpacing.setUnitType(DistanceUnit.class);
 		snapGridSpacing.setValidRange(1.0e-6, Double.POSITIVE_INFINITY);
 		snapGridSpacing.setPromptReqd(false);
 
-		incrementSize = new ValueInput("IncrementSize", "GUI", 0.1d);
+		incrementSize = new ValueInput("IncrementSize", GUI, 0.1d);
 		incrementSize.setUnitType(DistanceUnit.class);
 		incrementSize.setValidRange(1.0e-6, Double.POSITIVE_INFINITY);
 		incrementSize.setPromptReqd(false);
 
-		realTimeFactor = new ValueInput("RealTimeFactor", "GUI", DEFAULT_REAL_TIME_FACTOR);
+		realTimeFactor = new ValueInput("RealTimeFactor", GUI, DEFAULT_REAL_TIME_FACTOR);
 		realTimeFactor.setValidRange(MIN_REAL_TIME_FACTOR, MAX_REAL_TIME_FACTOR);
 		realTimeFactor.setPromptReqd(false);
 		realTimeFactor.setHidden(true);
 
-		pauseTime = new ValueInput("PauseTime", "GUI", Double.POSITIVE_INFINITY);
+		pauseTime = new ValueInput("PauseTime", GUI, Double.POSITIVE_INFINITY);
 		pauseTime.setUnitType(TimeUnit.class);
 		pauseTime.setValidRange(0.0d, Double.POSITIVE_INFINITY);
 		pauseTime.setPromptReqd(false);
 		pauseTime.setHidden(true);
 
-		showModelBuilder = new BooleanInput("ShowModelBuilder", "GUI", false);
+		showModelBuilder = new BooleanInput("ShowModelBuilder", GUI, false);
 		showModelBuilder.setPromptReqd(false);
 		showModelBuilder.setHidden(true);
 
-		showObjectSelector = new BooleanInput("ShowObjectSelector", "GUI", false);
+		showObjectSelector = new BooleanInput("ShowObjectSelector", GUI, false);
 		showObjectSelector.setPromptReqd(false);
 		showObjectSelector.setHidden(true);
 
-		showInputEditor = new BooleanInput("ShowInputEditor", "GUI", false);
+		showInputEditor = new BooleanInput("ShowInputEditor", GUI, false);
 		showInputEditor.setPromptReqd(false);
 		showInputEditor.setHidden(true);
 
-		showOutputViewer = new BooleanInput("ShowOutputViewer", "GUI", false);
+		showOutputViewer = new BooleanInput("ShowOutputViewer", GUI, false);
 		showOutputViewer.setPromptReqd(false);
 		showOutputViewer.setHidden(true);
 
-		showPropertyViewer = new BooleanInput("ShowPropertyViewer", "GUI", false);
+		showPropertyViewer = new BooleanInput("ShowPropertyViewer", GUI, false);
 		showPropertyViewer.setPromptReqd(false);
 		showPropertyViewer.setHidden(true);
 
-		showLogViewer = new BooleanInput("ShowLogViewer", "GUI", false);
+		showLogViewer = new BooleanInput("ShowLogViewer", GUI, false);
 		showLogViewer.setPromptReqd(false);
 		showLogViewer.setHidden(true);
 
-		showEventViewer = new BooleanInput("ShowEventViewer", "GUI", false);
+		showEventViewer = new BooleanInput("ShowEventViewer", GUI, false);
 		showEventViewer.setPromptReqd(false);
 		showEventViewer.setHidden(true);
 
+		modelBuilderPos = new IntegerListInput("ModelBuilderPos", GUI, null);
+		modelBuilderPos.setValidCount(2);
+		modelBuilderPos.setValidRange(-8192, 8192);
+		modelBuilderPos.setPromptReqd(false);
+		modelBuilderPos.setHidden(true);
+
+		modelBuilderSize = new IntegerListInput("ModelBuilderSize", GUI, null);
+		modelBuilderSize.setValidCount(2);
+		modelBuilderSize.setValidRange(1, 8192);
+		modelBuilderSize.setPromptReqd(false);
+		modelBuilderSize.setHidden(true);
+
+		objectSelectorPos = new IntegerListInput("ObjectSelectorPos", GUI, null);
+		objectSelectorPos.setValidCount(2);
+		objectSelectorPos.setValidRange(-8192, 8192);
+		objectSelectorPos.setPromptReqd(false);
+		objectSelectorPos.setHidden(true);
+
+		objectSelectorSize = new IntegerListInput("ObjectSelectorSize", GUI, null);
+		objectSelectorSize.setValidCount(2);
+		objectSelectorSize.setValidRange(1, 8192);
+		objectSelectorSize.setPromptReqd(false);
+		objectSelectorSize.setHidden(true);
+
+		inputEditorPos = new IntegerListInput("InputEditorPos", GUI, null);
+		inputEditorPos.setValidCount(2);
+		inputEditorPos.setValidRange(-8192, 8192);
+		inputEditorPos.setPromptReqd(false);
+		inputEditorPos.setHidden(true);
+
+		inputEditorSize = new IntegerListInput("InputEditorSize", GUI, null);
+		inputEditorSize.setValidCount(2);
+		inputEditorSize.setValidRange(1, 8192);
+		inputEditorSize.setPromptReqd(false);
+		inputEditorSize.setHidden(true);
+
+		outputViewerPos = new IntegerListInput("OutputViewerPos", GUI, null);
+		outputViewerPos.setValidCount(2);
+		outputViewerPos.setValidRange(-8192, 8192);
+		outputViewerPos.setPromptReqd(false);
+		outputViewerPos.setHidden(true);
+
+		outputViewerSize = new IntegerListInput("OutputViewerSize", GUI, null);
+		outputViewerSize.setValidCount(2);
+		outputViewerSize.setValidRange(1, 8192);
+		outputViewerSize.setPromptReqd(false);
+		outputViewerSize.setHidden(true);
+
+		propertyViewerPos = new IntegerListInput("PropertyViewerPos", GUI, null);
+		propertyViewerPos.setValidCount(2);
+		propertyViewerPos.setValidRange(-8192, 8192);
+		propertyViewerPos.setPromptReqd(false);
+		propertyViewerPos.setHidden(true);
+
+		propertyViewerSize = new IntegerListInput("PropertyViewerSize", GUI, null);
+		propertyViewerSize.setValidCount(2);
+		propertyViewerSize.setValidRange(1, 8192);
+		propertyViewerSize.setPromptReqd(false);
+		propertyViewerSize.setHidden(true);
+
+		logViewerPos = new IntegerListInput("LogViewerPos", GUI, null);
+		logViewerPos.setValidCount(2);
+		logViewerPos.setValidRange(-8192, 8192);
+		logViewerPos.setPromptReqd(false);
+		logViewerPos.setHidden(true);
+
+		logViewerSize = new IntegerListInput("LogViewerSize", GUI, null);
+		logViewerSize.setValidCount(2);
+		logViewerSize.setValidRange(1, 8192);
+		logViewerSize.setPromptReqd(false);
+		logViewerSize.setHidden(true);
+
+		eventViewerPos = new IntegerListInput("EventViewerPos", GUI, null);
+		eventViewerPos.setValidCount(2);
+		eventViewerPos.setValidRange(-8192, 8192);
+		eventViewerPos.setPromptReqd(false);
+		eventViewerPos.setHidden(true);
+
+		eventViewerSize = new IntegerListInput("EventViewerSize", GUI, null);
+		eventViewerSize.setValidCount(2);
+		eventViewerSize.setValidRange(1, 8192);
+		eventViewerSize.setPromptReqd(false);
+		eventViewerSize.setHidden(true);
+
+		controlPanelWidth = new IntegerInput("ControlPanelWidth", GUI, null);
+		controlPanelWidth.setValidRange(1, 8192);
+		controlPanelWidth.setPromptReqd(false);
+		controlPanelWidth.setHidden(true);
+
 		// Hidden keywords
-		startTimeInput = new ValueInput("StartTime", "Key Inputs", 0.0d);
+		startTimeInput = new ValueInput("StartTime", KEY_INPUTS, 0.0d);
 		startTimeInput.setUnitType(TimeUnit.class);
 		startTimeInput.setValidRange(0.0d, Double.POSITIVE_INFINITY);
 
-		traceEventsInput = new BooleanInput("TraceEvents", "Key Inputs", false);
-		verifyEventsInput = new BooleanInput("VerifyEvents", "Key Inputs", false);
+		traceEventsInput = new BooleanInput("TraceEvents", KEY_INPUTS, false);
+		verifyEventsInput = new BooleanInput("VerifyEvents", KEY_INPUTS, false);
 
-		printInputReport = new BooleanInput("PrintInputReport", "Key Inputs", false);
+		printInputReport = new BooleanInput("PrintInputReport", KEY_INPUTS, false);
 
 		// Initialize basic model information
 		startTime = 0.0;
@@ -413,6 +583,21 @@ public class Simulation extends Entity {
 		this.addInput(showPropertyViewer);
 		this.addInput(showLogViewer);
 		this.addInput(showEventViewer);
+		this.addInput(modelBuilderPos);
+		this.addInput(modelBuilderSize);
+		this.addInput(objectSelectorPos);
+		this.addInput(objectSelectorSize);
+		this.addInput(inputEditorPos);
+		this.addInput(inputEditorSize);
+		this.addInput(outputViewerPos);
+		this.addInput(outputViewerSize);
+		this.addInput(propertyViewerPos);
+		this.addInput(propertyViewerSize);
+		this.addInput(logViewerPos);
+		this.addInput(logViewerSize);
+		this.addInput(eventViewerPos);
+		this.addInput(eventViewerSize);
+		this.addInput(controlPanelWidth);
 
 		// Hidden keywords
 		this.addInput(startTimeInput);
@@ -547,6 +732,101 @@ public class Simulation extends Entity {
 			}
 			return;
 		}
+
+		if (in == modelBuilderPos) {
+			IntegerVector pos = modelBuilderPos.getValue();
+			EntityPallet.getInstance().setLocation(pos.get(0), pos.get(1));
+			return;
+		}
+
+		if (in == modelBuilderSize) {
+			IntegerVector size = modelBuilderSize.getValue();
+			EntityPallet.getInstance().setSize(size.get(0), size.get(1));
+			return;
+		}
+
+		if (in == objectSelectorPos) {
+			IntegerVector pos = objectSelectorPos.getValue();
+			ObjectSelector.getInstance().setLocation(pos.get(0), pos.get(1));
+			return;
+		}
+
+		if (in == objectSelectorSize) {
+			IntegerVector size = objectSelectorSize.getValue();
+			ObjectSelector.getInstance().setSize(size.get(0), size.get(1));
+			return;
+		}
+
+		if (in == inputEditorPos) {
+			IntegerVector pos = inputEditorPos.getValue();
+			EditBox.getInstance().setLocation(pos.get(0), pos.get(1));
+			return;
+		}
+
+		if (in == inputEditorSize) {
+			IntegerVector size = inputEditorSize.getValue();
+			EditBox.getInstance().setSize(size.get(0), size.get(1));
+			return;
+		}
+
+		if (in == outputViewerPos) {
+			IntegerVector pos = outputViewerPos.getValue();
+			OutputBox.getInstance().setLocation(pos.get(0), pos.get(1));
+			return;
+		}
+
+		if (in == outputViewerSize) {
+			IntegerVector size = outputViewerSize.getValue();
+			OutputBox.getInstance().setSize(size.get(0), size.get(1));
+			return;
+		}
+
+		if (in == propertyViewerPos) {
+			IntegerVector pos = propertyViewerPos.getValue();
+			PropertyBox.getInstance().setLocation(pos.get(0), pos.get(1));
+			return;
+		}
+
+		if (in == propertyViewerSize) {
+			IntegerVector size = propertyViewerSize.getValue();
+			PropertyBox.getInstance().setSize(size.get(0), size.get(1));
+			return;
+		}
+
+		if (in == logViewerPos) {
+			IntegerVector pos = logViewerPos.getValue();
+			LogBox.getInstance().setLocation(pos.get(0), pos.get(1));
+			return;
+		}
+
+		if (in == logViewerSize) {
+			IntegerVector size = logViewerSize.getValue();
+			LogBox.getInstance().setSize(size.get(0), size.get(1));
+			return;
+		}
+
+		if (in == eventViewerPos) {
+			if (EventViewer.hasInstance()) {
+				IntegerVector pos = eventViewerPos.getValue();
+				EventViewer.getInstance().setLocation(pos.get(0), pos.get(1));
+			}
+			return;
+		}
+
+		if (in == eventViewerSize) {
+			if (EventViewer.hasInstance()) {
+				IntegerVector size = eventViewerSize.getValue();
+				EventViewer.getInstance().setSize(size.get(0), size.get(1));
+			}
+			return;
+		}
+
+		if (in == controlPanelWidth) {
+			int width = controlPanelWidth.getValue();
+			int height = GUIFrame.getInstance().getSize().height;
+			GUIFrame.getInstance().setSize(width, height);
+			return;
+		}
 	}
 
 	@Override
@@ -570,7 +850,7 @@ public class Simulation extends Entity {
 
 		// Reset all Simulation inputs to their default values
 		for (Input<?> inp : Simulation.getInstance().getEditableInputs()) {
-			inp.reset();
+			InputAgent.applyArgs(getInstance(), inp.getKeyword());
 		}
 
 		updateRealTime();
@@ -928,6 +1208,188 @@ public class Simulation extends Entity {
 		f.setVisible(visible);
 		if (visible)
 			f.toFront();
+	}
+
+	public static void setWindowDefaults() {
+		modelBuilderPos.setDefaultValue(GUIFrame.COL1_START, GUIFrame.TOP_START);
+		modelBuilderSize.setDefaultValue(GUIFrame.COL1_WIDTH, GUIFrame.HALF_TOP);
+		objectSelectorPos.setDefaultValue(GUIFrame.COL1_START, GUIFrame.BOTTOM_START);
+		objectSelectorSize.setDefaultValue(GUIFrame.COL1_WIDTH, GUIFrame.HALF_BOTTOM);
+		inputEditorPos.setDefaultValue(GUIFrame.COL2_START, GUIFrame.LOWER_START);
+		inputEditorSize.setDefaultValue(GUIFrame.COL2_WIDTH, GUIFrame.LOWER_HEIGHT);
+		outputViewerPos.setDefaultValue(GUIFrame.COL3_START, GUIFrame.LOWER_START);
+		outputViewerSize.setDefaultValue(GUIFrame.COL3_WIDTH, GUIFrame.LOWER_HEIGHT);
+		propertyViewerPos.setDefaultValue(GUIFrame.COL4_START, GUIFrame.TOP_START);
+		propertyViewerSize.setDefaultValue(GUIFrame.COL4_WIDTH, GUIFrame.HALF_TOP);
+		logViewerPos.setDefaultValue(GUIFrame.COL4_START, GUIFrame.BOTTOM_START);
+		logViewerSize.setDefaultValue(GUIFrame.COL4_WIDTH, GUIFrame.HALF_BOTTOM);
+		eventViewerPos.setDefaultValue(GUIFrame.COL4_START, GUIFrame.BOTTOM_START);
+		eventViewerSize.setDefaultValue(GUIFrame.COL4_WIDTH, GUIFrame.HALF_BOTTOM);
+		controlPanelWidth.setDefaultValue(GUIFrame.DEFAULT_GUI_WIDTH);
+	}
+
+	public static void resetWindowPositionsAndSizes() {
+		InputAgent.applyArgs(getInstance(), modelBuilderPos.getKeyword());
+		InputAgent.applyArgs(getInstance(), modelBuilderSize.getKeyword());
+		InputAgent.applyArgs(getInstance(), objectSelectorPos.getKeyword());
+		InputAgent.applyArgs(getInstance(), objectSelectorSize.getKeyword());
+		InputAgent.applyArgs(getInstance(), inputEditorPos.getKeyword());
+		InputAgent.applyArgs(getInstance(), inputEditorSize.getKeyword());
+		InputAgent.applyArgs(getInstance(), outputViewerPos.getKeyword());
+		InputAgent.applyArgs(getInstance(), outputViewerSize.getKeyword());
+		InputAgent.applyArgs(getInstance(), propertyViewerPos.getKeyword());
+		InputAgent.applyArgs(getInstance(), propertyViewerSize.getKeyword());
+		InputAgent.applyArgs(getInstance(), logViewerPos.getKeyword());
+		InputAgent.applyArgs(getInstance(), logViewerSize.getKeyword());
+		InputAgent.applyArgs(getInstance(), eventViewerPos.getKeyword());
+		InputAgent.applyArgs(getInstance(), eventViewerSize.getKeyword());
+		InputAgent.applyArgs(getInstance(), controlPanelWidth.getKeyword());
+	}
+
+	public static IntegerVector getModelBuilderPos() {
+		return modelBuilderPos.getValue();
+	}
+
+	public static IntegerVector getModelBuilderSize() {
+		return modelBuilderSize.getValue();
+	}
+
+	public static IntegerVector getObjectSelectorPos() {
+		return objectSelectorPos.getValue();
+	}
+
+	public static IntegerVector getObjectSelectorSize() {
+		return objectSelectorSize.getValue();
+	}
+
+	public static IntegerVector getInputEditorPos() {
+		return inputEditorPos.getValue();
+	}
+
+	public static IntegerVector getInputEditorSize() {
+		return inputEditorSize.getValue();
+	}
+
+	public static IntegerVector getOutputViewerPos() {
+		return outputViewerPos.getValue();
+	}
+
+	public static IntegerVector getOutputViewerSize() {
+		return outputViewerSize.getValue();
+	}
+
+	public static IntegerVector getPropertyViewerPos() {
+		return propertyViewerPos.getValue();
+	}
+
+	public static IntegerVector getPropertyViewerSize() {
+		return propertyViewerSize.getValue();
+	}
+
+	public static IntegerVector getLogViewerPos() {
+		return logViewerPos.getValue();
+	}
+
+	public static IntegerVector getLogViewerSize() {
+		return logViewerSize.getValue();
+	}
+
+	public static IntegerVector getEventViewerPos() {
+		return eventViewerPos.getValue();
+	}
+
+	public static IntegerVector getEventViewerSize() {
+		return eventViewerSize.getValue();
+	}
+
+	public static void setModelBuilderPos(int x, int y) {
+		if (modelBuilderPos.getValue().get(0) == x && modelBuilderPos.getValue().get(1) == y)
+			return;
+		InputAgent.applyIntegers(getInstance(), modelBuilderPos.getKeyword(), x, y);
+	}
+
+	public static void setModelBuilderSize(int x, int y) {
+		if (modelBuilderSize.getValue().get(0) == x && modelBuilderSize.getValue().get(1) == y)
+			return;
+		InputAgent.applyIntegers(getInstance(), modelBuilderSize.getKeyword(), x, y);
+	}
+
+	public static void setObjectSelectorPos(int x, int y) {
+		if (objectSelectorPos.getValue().get(0) == x && objectSelectorPos.getValue().get(1) == y)
+			return;
+		InputAgent.applyIntegers(getInstance(), objectSelectorPos.getKeyword(), x, y);
+	}
+
+	public static void setObjectSelectorSize(int x, int y) {
+		if (objectSelectorSize.getValue().get(0) == x && objectSelectorSize.getValue().get(1) == y)
+			return;
+		InputAgent.applyIntegers(getInstance(), objectSelectorSize.getKeyword(), x, y);
+	}
+
+	public static void setInputEditorPos(int x, int y) {
+		if (inputEditorPos.getValue().get(0) == x && inputEditorPos.getValue().get(1) == y)
+			return;
+		InputAgent.applyIntegers(getInstance(), inputEditorPos.getKeyword(), x, y);
+	}
+
+	public static void setInputEditorSize(int x, int y) {
+		if (inputEditorSize.getValue().get(0) == x && inputEditorSize.getValue().get(1) == y)
+			return;
+		InputAgent.applyIntegers(getInstance(), inputEditorSize.getKeyword(), x, y);
+	}
+
+	public static void setOutputViewerPos(int x, int y) {
+		if (outputViewerPos.getValue().get(0) == x && outputViewerPos.getValue().get(1) == y)
+			return;
+		InputAgent.applyIntegers(getInstance(), outputViewerPos.getKeyword(), x, y);
+	}
+
+	public static void setOutputViewerSize(int x, int y) {
+		if (outputViewerSize.getValue().get(0) == x && outputViewerSize.getValue().get(1) == y)
+			return;
+		InputAgent.applyIntegers(getInstance(), outputViewerSize.getKeyword(), x, y);
+	}
+
+	public static void setPropertyViewerPos(int x, int y) {
+		if (propertyViewerPos.getValue().get(0) == x && propertyViewerPos.getValue().get(1) == y)
+			return;
+		InputAgent.applyIntegers(getInstance(), propertyViewerPos.getKeyword(), x, y);
+	}
+
+	public static void setPropertyViewerSize(int x, int y) {
+		if (propertyViewerSize.getValue().get(0) == x && propertyViewerSize.getValue().get(1) == y)
+			return;
+		InputAgent.applyIntegers(getInstance(), propertyViewerSize.getKeyword(), x, y);
+	}
+
+	public static void setLogViewerPos(int x, int y) {
+		if (logViewerPos.getValue().get(0) == x && logViewerPos.getValue().get(1) == y)
+			return;
+		InputAgent.applyIntegers(getInstance(), logViewerPos.getKeyword(), x, y);
+	}
+
+	public static void setLogViewerSize(int x, int y) {
+		if (logViewerSize.getValue().get(0) == x && logViewerSize.getValue().get(1) == y)
+			return;
+		InputAgent.applyIntegers(getInstance(), logViewerSize.getKeyword(), x, y);
+	}
+
+	public static void setEventViewerPos(int x, int y) {
+		if (eventViewerPos.getValue().get(0) == x && eventViewerPos.getValue().get(1) == y)
+			return;
+		InputAgent.applyIntegers(getInstance(), eventViewerPos.getKeyword(), x, y);
+	}
+
+	public static void setEventViewerSize(int x, int y) {
+		if (eventViewerSize.getValue().get(0) == x && eventViewerSize.getValue().get(1) == y)
+			return;
+		InputAgent.applyIntegers(getInstance(), eventViewerSize.getKeyword(), x, y);
+	}
+
+	public static void setControlPanelWidth(int width) {
+		if (controlPanelWidth.getValue() == width)
+			return;
+		InputAgent.applyIntegers(getInstance(), controlPanelWidth.getKeyword(), width);
 	}
 
 	/**

@@ -118,6 +118,7 @@ public class Renderer implements GLAnimatorControl {
 	private boolean gl3Supported;
 
 	private final TexCache texCache = new TexCache(this);
+	private final GraphicsMemManager graphicsMemManager = new GraphicsMemManager(this);
 
 	// An initalization time flag specifying if the 'safest' graphical techniques should be used
 	private boolean safeGraphics;
@@ -301,6 +302,16 @@ public class Renderer implements GLAnimatorControl {
 				}
 
 				displayNeeded.set(false);
+
+				// Area for common housekeeping
+				sharedContext.makeCurrent();
+				drawContext = sharedContext;
+
+				graphicsMemManager.tickFrame();
+				graphicsMemManager.freeOldTextures();
+
+				sharedContext.release();
+				drawContext = null;
 
 				updateRenderableScene();
 
@@ -1337,6 +1348,9 @@ private void initCoreShaders(GL2GL3 gl, String version) throws RenderException {
 
 	public TexCache getTexCache() {
 		return texCache;
+	}
+	public GraphicsMemManager getTexMemManager() {
+		return graphicsMemManager;
 	}
 
 	public static boolean debugDrawHulls() {

@@ -1,7 +1,7 @@
 /*
  * JaamSim Discrete Event Simulation
  * Copyright (C) 2010-2012 Ausenco Engineering Canada Inc.
- * Copyright (C) 2016 JaamSim Software Inc.
+ * Copyright (C) 2016-2018 JaamSim Software Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -87,6 +87,7 @@ public abstract class Input<T> {
 	protected static final String VALID_ENTITY_PROV = "Accepts an entity name or an expression that returns an entity.";
 	protected static final String VALID_ENTITY_PROV_TYPE = "Accepts the name of an entity of type %s or an expression that returns such an entity.";
 	protected static final String VALID_COLOUR = "Accepts a colour name, an RGB value, or an RGB/transparency value.";
+	protected static final String VALID_INTEGER = "Accepts a dimensionless integer value.";
 	protected static final String VALID_VALUE = "Accepts a number with units of type %s.";
 	protected static final String VALID_VALUE_DIMLESS = "Accepts a dimensionless number.";
 	protected static final String VALID_VALUE_UNIT = "Accepts a number with or without units. "
@@ -129,6 +130,7 @@ public abstract class Input<T> {
 	public static final String POSITIVE_INFINITY = "Infinity";
 	public static final String NEGATIVE_INFINITY = "-Infinity";
 	public static final String SEPARATOR = "  ";
+	public static final String BRACE_SEPARATOR = " ";
 
 	private String keyword; // the preferred name for the input keyword
 	private final String category;
@@ -189,10 +191,28 @@ public abstract class Input<T> {
 	}
 
 	/**
+	 * Assigns the internal state for this input to the same values as the
+	 * specified input.
+	 * <p>
+	 * This method provides the same function as copyFrom by re-parsing the input data instead of
+	 * copying the internal variables. This operation is much slower, but is needed for inputs that
+	 * cannot be copied successfully using copyFrom, such as inputs that accept an expression.
+	 * @param in - input object to be copied.
+	 */
+	public void parseFrom(Input<?> in) {
+		ArrayList<String> toks = new ArrayList<>(Arrays.asList(valueTokens));
+		KeywordIndex kw = new KeywordIndex(in.getKeyword(), toks, null);
+		parse(kw);
+	}
+
+	/**
 	 * Deletes any use of the specified entity from this input.
 	 * @param ent - entity whose references are to be deleted
+	 * @return true if a reference was removed
 	 */
-	public void removeReferences(Entity ent) {}
+	public boolean removeReferences(Entity ent) {
+		return false;
+	}
 
 	/**
 	 * Describes the valid inputs for this type of input.
@@ -200,6 +220,15 @@ public abstract class Input<T> {
 	 */
 	public String getValidInputDesc() {
 		return null;
+	}
+
+	/**
+	 * Corrects common input errors that can be detected prior to parsing.
+	 * @param str - uncorrected input string
+	 * @return corrected input string
+	 */
+	public String applyConditioning(String str) {
+		return str;
 	}
 
 	@Override
@@ -288,6 +317,14 @@ public abstract class Input<T> {
 
 	public boolean isValid() {
 		return isValid;
+	}
+
+	public boolean useExpressionBuilder() {
+		return false;
+	}
+
+	public String getPresentValueString(double simTime) {
+		return getValueString();
 	}
 
 	public void validate() throws InputErrorException {
@@ -436,6 +473,12 @@ public abstract class Input<T> {
 		return isDef;
 	}
 
+	public ArrayList<String> getValueTokens() {
+		ArrayList<String> ret = new ArrayList<>();
+		getValueTokens(ret);
+		return ret;
+	}
+
 	public void getValueTokens(ArrayList<String> toks) {
 		if (valueTokens == null)
 			return;
@@ -446,7 +489,6 @@ public abstract class Input<T> {
 
 	public final String getValueString() {
 		if (isDefault()) return "";
-
 		ArrayList<String> tmp = new ArrayList<>();
 		try {
 			getValueTokens(tmp);
@@ -456,14 +498,32 @@ public abstract class Input<T> {
 			InputAgent.logStackTrace(e);
 			this.reset();
 		}
-		if (tmp.size() == 0) return "";
+		return getValueString(tmp, false);
+	}
+
+	public static final String getValueString(ArrayList<String> tokens, boolean addLF) {
+		if (tokens.size() == 0) return "";
 
 		StringBuilder sb = new StringBuilder();
-		for (int i = 0; i < tmp.size(); i++) {
-			String dat = tmp.get(i);
+		for (int i = 0; i < tokens.size(); i++) {
+			String dat = tokens.get(i);
 			if (dat == null) continue;
-			if (i > 0)
-				sb.append(Input.SEPARATOR);
+			if (i > 0) {
+				if (dat.equals("}") || tokens.get(i-1).equals("{")) {
+					sb.append(Input.BRACE_SEPARATOR);
+				}
+				else if (dat.equals("{")) {
+					if (addLF) {
+						sb.append("\n");
+					}
+					else {
+						sb.append(Input.BRACE_SEPARATOR);
+					}
+				}
+				else {
+					sb.append(Input.SEPARATOR);
+				}
+			}
 
 			if (Parser.needsQuoting(dat) && !dat.equals("{") && !dat.equals("}"))
 				sb.append("'").append(dat).append("'");
@@ -1328,6 +1388,12 @@ public abstract class Input<T> {
 		return u;
 	}
 
+	public static Class<? extends Unit> parseUnitType(String utName) {
+		ObjectType ot = Input.parseEntity(utName, ObjectType.class);
+		Class<? extends Unit> ut = Input.checkCast(ot.getJavaClass(), Unit.class);
+		return ut;
+	}
+
 	public static <T extends Entity> ArrayList<T> parseEntityList(KeywordIndex kw, Class<T> aClass, boolean unique)
 	throws InputErrorException {
 		ArrayList<T> temp = new ArrayList<>(kw.numArgs());
@@ -1546,6 +1612,10 @@ public abstract class Input<T> {
 
 		if (unitType == UserSpecifiedUnit.class)
 			throw new InputErrorException(INP_ERR_UNITUNSPECIFIED);
+
+		// More than two inputs is an error
+		if (kw.numArgs() > 2)
+			throw new InputErrorException(INP_ERR_RANGECOUNT, 1, 2, kw.argString());
 
 		// If there are exactly two inputs, then it must be a number and its unit
 		if (kw.numArgs() == 2) {

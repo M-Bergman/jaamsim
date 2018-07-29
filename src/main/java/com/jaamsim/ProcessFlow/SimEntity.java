@@ -39,7 +39,7 @@ public class SimEntity extends StateEntity implements LinkDisplayable {
 		stateGraphics.setHidden(false);
 		workingStateListInput.setHidden(true);
 
-		defaultStateList = new StringListInput("DefaultStateList", "Key Inputs", new ArrayList<String>());
+		defaultStateList = new StringListInput("DefaultStateList", KEY_INPUTS, new ArrayList<String>());
 		this.addInput(defaultStateList);
 	}
 
@@ -57,6 +57,13 @@ public class SimEntity extends StateEntity implements LinkDisplayable {
 	@Override
 	public String getInitialState() {
 		return "None";
+	}
+
+	@Override
+	public void clearReportStats() {
+		if (testFlag(Entity.FLAG_GENERATED))
+			return;
+		super.clearReportStats();
 	}
 
 	@Override

@@ -1,7 +1,7 @@
 /*
  * JaamSim Discrete Event Simulation
  * Copyright (C) 2002-2011 Ausenco Engineering Canada Inc.
- * Copyright (C) 2017 JaamSim Software Inc.
+ * Copyright (C) 2017-2018 JaamSim Software Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,9 +20,7 @@ package com.jaamsim.Graphics;
 import java.util.ArrayList;
 import java.util.HashMap;
 
-import com.jaamsim.Commands.DeleteCommand;
 import com.jaamsim.Commands.KeywordCommand;
-import com.jaamsim.DisplayModels.ArrowModel;
 import com.jaamsim.DisplayModels.DisplayModel;
 import com.jaamsim.DisplayModels.ImageModel;
 import com.jaamsim.DisplayModels.PolylineModel;
@@ -31,8 +29,8 @@ import com.jaamsim.DisplayModels.TextModel;
 import com.jaamsim.basicsim.Entity;
 import com.jaamsim.basicsim.ObjectType;
 import com.jaamsim.basicsim.Simulation;
+import com.jaamsim.datatypes.DoubleVector;
 import com.jaamsim.input.BooleanInput;
-import com.jaamsim.input.ColourInput;
 import com.jaamsim.input.EntityInput;
 import com.jaamsim.input.EntityListInput;
 import com.jaamsim.input.EnumInput;
@@ -43,6 +41,7 @@ import com.jaamsim.input.Keyword;
 import com.jaamsim.input.KeywordIndex;
 import com.jaamsim.input.Output;
 import com.jaamsim.input.RelativeEntityInput;
+import com.jaamsim.input.ValueListInput;
 import com.jaamsim.input.Vec3dInput;
 import com.jaamsim.input.Vec3dListInput;
 import com.jaamsim.math.Color4d;
@@ -52,7 +51,9 @@ import com.jaamsim.math.Transform;
 import com.jaamsim.math.Vec3d;
 import com.jaamsim.render.DisplayModelBinding;
 import com.jaamsim.render.RenderUtils;
+import com.jaamsim.render.VisibilityInfo;
 import com.jaamsim.ui.FrameBox;
+import com.jaamsim.ui.View;
 import com.jaamsim.units.AngleUnit;
 import com.jaamsim.units.DimensionlessUnit;
 import com.jaamsim.units.DistanceUnit;
@@ -127,6 +128,14 @@ public class DisplayEntity extends Entity {
 	         exampleList = {"FALSE"})
 	private final BooleanInput movable;
 
+	@Keyword(description = "The view windows on which this entity will be visible.",
+	         exampleList = {"View2 View3"})
+	private final EntityListInput<View> visibleViews;
+
+	@Keyword(description = "The distances from the camera that this entity will be visible",
+	         exampleList = {"0 100 m"})
+	private final ValueListInput drawRange;
+
 	private final Vec3d position = new Vec3d();
 	private final Vec3d size = new Vec3d(1.0d, 1.0d, 1.0d);
 	private final Vec3d orient = new Vec3d();
@@ -137,57 +146,75 @@ public class DisplayEntity extends Entity {
 	private Region currentRegion;
 
 	private ArrayList<DisplayModelBinding> modelBindings;
+	private VisibilityInfo visInfo = null;
 
 	private final HashMap<String, Tag> tagMap = new HashMap<>();
 
+	private static final ArrayList<Vec3d> defPoints =  new ArrayList<>();
+	private static final DoubleVector defRange = new DoubleVector(2);
+	static {
+		defPoints.add(new Vec3d(0.0d, 0.0d, 0.0d));
+		defPoints.add(new Vec3d(1.0d, 0.0d, 0.0d));
+
+		defRange.add(0.0d);
+		defRange.add(Double.POSITIVE_INFINITY);
+	}
+
 	{
-		positionInput = new Vec3dInput("Position", "Graphics", new Vec3d());
+		positionInput = new Vec3dInput("Position", GRAPHICS, new Vec3d());
 		positionInput.setUnitType(DistanceUnit.class);
 		this.addInput(positionInput);
 
-		alignmentInput = new Vec3dInput("Alignment", "Graphics", new Vec3d());
+		alignmentInput = new Vec3dInput("Alignment", GRAPHICS, new Vec3d());
 		this.addInput(alignmentInput);
 
-		sizeInput = new Vec3dInput("Size", "Graphics", new Vec3d(1.0d, 1.0d, 1.0d));
+		sizeInput = new Vec3dInput("Size", GRAPHICS, new Vec3d(1.0d, 1.0d, 1.0d));
 		sizeInput.setUnitType(DistanceUnit.class);
 		sizeInput.setValidRange(0.0d, Double.POSITIVE_INFINITY);
 		this.addInput(sizeInput);
 
-		orientationInput = new Vec3dInput("Orientation", "Graphics", new Vec3d());
+		orientationInput = new Vec3dInput("Orientation", GRAPHICS, new Vec3d());
 		orientationInput.setUnitType(AngleUnit.class);
 		this.addInput(orientationInput);
 
-		ArrayList<Vec3d> defPoints =  new ArrayList<>();
-		defPoints.add(new Vec3d(0.0d, 0.0d, 0.0d));
-		defPoints.add(new Vec3d(1.0d, 0.0d, 0.0d));
-		pointsInput = new Vec3dListInput("Points", "Graphics", defPoints);
+		pointsInput = new Vec3dListInput("Points", GRAPHICS, defPoints);
 		pointsInput.setValidCountRange( 2, Integer.MAX_VALUE );
 		pointsInput.setUnitType(DistanceUnit.class);
 		this.addInput(pointsInput);
 
-		curveTypeInput = new EnumInput<>(PolylineInfo.CurveType.class, "CurveType", "Graphics", PolylineInfo.CurveType.LINEAR);
+		curveTypeInput = new EnumInput<>(PolylineInfo.CurveType.class, "CurveType", GRAPHICS, PolylineInfo.CurveType.LINEAR);
 		this.addInput(curveTypeInput);
 
-		regionInput = new EntityInput<>(Region.class, "Region", "Graphics", null);
+		regionInput = new EntityInput<>(Region.class, "Region", GRAPHICS, null);
 		this.addInput(regionInput);
 
-		relativeEntity = new RelativeEntityInput("RelativeEntity", "Graphics", null);
+		relativeEntity = new RelativeEntityInput("RelativeEntity", GRAPHICS, null);
 		relativeEntity.setEntity(this);
 		this.addInput(relativeEntity);
 
-		displayModelListInput = new EntityListInput<>( DisplayModel.class, "DisplayModel", "Graphics", null);
+		displayModelListInput = new EntityListInput<>( DisplayModel.class, "DisplayModel", GRAPHICS, null);
 		this.addInput(displayModelListInput);
 		displayModelListInput.setUnique(false);
 
-		active = new BooleanInput("Active", "Key Inputs", true);
+		active = new BooleanInput("Active", KEY_INPUTS, true);
 		active.setHidden(true);
 		this.addInput(active);
 
-		showInput = new BooleanInput("Show", "Graphics", true);
+		showInput = new BooleanInput("Show", GRAPHICS, true);
 		this.addInput(showInput);
 
-		movable = new BooleanInput("Movable", "Graphics", true);
+		movable = new BooleanInput("Movable", GRAPHICS, true);
 		this.addInput(movable);
+
+		visibleViews = new EntityListInput<>(View.class, "VisibleViews", GRAPHICS, null);
+		visibleViews.setDefaultText("All Views");
+		this.addInput(visibleViews);
+
+		drawRange = new ValueListInput("DrawRange", GRAPHICS, defRange);
+		drawRange.setUnitType(DistanceUnit.class);
+		drawRange.setValidCount(2);
+		drawRange.setValidRange(0, Double.POSITIVE_INFINITY);
+		this.addInput(drawRange);
 	}
 
 	/**
@@ -229,7 +256,7 @@ public class DisplayEntity extends Entity {
 				alignBottom = false;
 		}
 
-		if (this instanceof Graph || this.usePointsInput() || this instanceof Region) {
+		if (this.usePointsInput() || alignmentInput.getHidden() || getSize().z == 0.0d) {
 			alignBottom = false;
 		}
 
@@ -275,6 +302,21 @@ public class DisplayEntity extends Entity {
 			invalidateScreenPoints();
 			return;
 		}
+
+		if (in == visibleViews || in == drawRange) {
+			if (visibleViews.isDefault() && drawRange.isDefault()) {
+				visInfo = null;
+			}
+			double minDist = drawRange.getValue().get(0);
+			double maxDist = drawRange.getValue().get(1);
+			// It's possible for the distance to be behind the camera, yet have the object visible (distance is to center)
+			// So instead use negative infinity in place of zero to never cull when close to the camera.
+			if (minDist == 0.0) {
+				minDist = Double.NEGATIVE_INFINITY;
+			}
+			visInfo = new VisibilityInfo(visibleViews.getValue(), minDist, maxDist);
+			return;
+		}
 	}
 
 	@Override
@@ -294,21 +336,23 @@ public class DisplayEntity extends Entity {
 	@Override
 	public void earlyInit() {
 		super.earlyInit();
-		this.resetGraphics();
+		if (! this.testFlag(FLAG_GENERATED)) {
+			this.resetGraphics();
+		}
 	}
 
 	@Override
-	public void kill() {
+	public void delete() {
 
 		// Kill the label
 		if (! this.testFlag(FLAG_GENERATED)) {
 			EntityLabel label = EntityLabel.getLabel(this);
 			if (label != null)
-				label.kill();
+				label.delete();
 		}
 
 		// Kill the DisplayEntity
-		super.kill();
+		super.delete();
 
 		// Clear the properties
 		currentRegion = null;
@@ -343,10 +387,7 @@ public class DisplayEntity extends Entity {
 		ArrayList<DisplayModel> dmList = displayModelListInput.getValue();
 		if (dmList == null || dmList.isEmpty())
 			return false;
-		boolean isPoly = dmList.get(0) instanceof PolylineModel;
-		boolean isArrow = dmList.get(0) instanceof ArrowModel;
-
-		return isPoly || isArrow;
+		return dmList.get(0) instanceof PolylineModel;
 	}
 
 	private void setGraphicsKeywords() {
@@ -799,6 +840,10 @@ public class DisplayEntity extends Entity {
 		return modelBindings;
 	}
 
+	public VisibilityInfo getVisibilityInfo() {
+		return visInfo;
+	}
+
 	public void dragged(Vec3d newPos) {
 
 		KeywordIndex kw = InputAgent.formatPointInputs(positionInput.getKeyword(), newPos, "m");
@@ -856,7 +901,7 @@ public class DisplayEntity extends Entity {
 
 	public void handleKeyReleased(int keyCode, char keyChar, boolean shift, boolean control, boolean alt) {
 		if (keyCode == KeyEvent.VK_DELETE) {
-			InputAgent.storeAndExecute(new DeleteCommand(this));
+			delete();
 			FrameBox.setSelectedEntity(null, false);
 			return;
 		}
@@ -873,6 +918,14 @@ public class DisplayEntity extends Entity {
 	 * @param ent
 	 */
 	public void linkTo(DisplayEntity nextEnt) {
+		// Do nothing in default behavior
+	}
+
+	/**
+	 * Set the inputs for the two entities affected by a 'split' operation.
+	 * @param splitEnt - entity split from the original
+	 */
+	public void setInputsForSplit(DisplayEntity splitEnt) {
 		// Do nothing in default behavior
 	}
 
@@ -897,7 +950,7 @@ public class DisplayEntity extends Entity {
 
 	public PolylineInfo[] buildScreenPoints(double simTime) {
 		PolylineInfo[] ret = new PolylineInfo[1];
-		ret[0] = new PolylineInfo(getCurvePoints(), ColourInput.BLACK, 1);
+		ret[0] = new PolylineInfo(getCurvePoints(), null, -1);
 		return ret;
 	}
 

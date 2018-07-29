@@ -1,7 +1,6 @@
 /*
  * JaamSim Discrete Event Simulation
- * Copyright (C) 2016 JaamSim Software Inc.
- * Copyright (C) 2017 JaamSim Software Inc.
+ * Copyright (C) 2016-2018 JaamSim Software Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -37,19 +36,29 @@ import com.jaamsim.units.Unit;
 
 public abstract class Logger extends DisplayEntity {
 
-	@Keyword(description = "The unit types for the sources of data specified by the 'DataSource' "
-	                     + "keyword. "
-	                     + "Use DimensionlessUnit for data sources that return strings, entities, "
-	                     + "or arrays. "
-	                     + "If only one unit type is given, then that unit type is used for all "
-	                     + "the values.",
+	@Keyword(description = "The unit types for the outputs specified by the DataSource keyword. "
+	                     + "Use DimensionlessUnit for non-numeric outputs such as strings, "
+	                     + "entities, and arrays. "
+	                     + "If the DataSource keyword has more entries than the UnitTypesList "
+	                     + "keyword, then the last unit type in the list is applied to the "
+	                     + "remaining DataSource entries.\n\n"
+	                     + "It is best to leave this input blank and use only dimensionless "
+	                     + "quantities and non-numeric outputs in the DataSource input.",
 	         exampleList = {"DistanceUnit  SpeedUnit"})
 	private final UnitTypeListInput unitTypeListInput;
 
-	@Keyword(description = "One or more sources of data to be logged. "
-	                     + "BEFORE entering this input, specify the unit types for the data "
-	                     + "sources using the 'UnitTypeList' keyword.",
-	         exampleList = {"{ [Entity1].Output1 } { [Entity2].Output2 }"})
+	@Keyword(description = "One or more selected outputs to be logged. Each output is specified "
+	                     + "by an expression.\n\n"
+	                     + "It is best to include only dimensionless quantities and non-numeric "
+	                     + "outputs in the DataSource input. "
+	                     + "An output with dimensions can be made non-dimensional by dividing it "
+	                     + "by 1 in the desired unit, e.g. '[Queue1].AverageQueueTime / 1[h]' is "
+	                     + "the average queue time in hours.\n\n"
+	                     + "If a number with dimensions is to be recorded, its unit type must "
+	                     + "first be entered in the correct position in the input to the "
+	                     + "UnitTypeList keyword.",
+	         exampleList = {"{ [Queue1].QueueLengthAverage }"
+	                     + " { '[Queue1].AverageQueueTime / 1[h]' }"})
 	private final StringProvListInput dataSource;
 
 	@Keyword(description = "If TRUE, log entries are recorded during the initialization period.",
@@ -70,24 +79,24 @@ public abstract class Logger extends DisplayEntity {
 	{
 		ArrayList<Class<? extends Unit>> defList = new ArrayList<>();
 		defList.add(DimensionlessUnit.class);
-		unitTypeListInput = new UnitTypeListInput("UnitTypeList", "Key Inputs", defList);
+		unitTypeListInput = new UnitTypeListInput("UnitTypeList", KEY_INPUTS, defList);
 		this.addInput(unitTypeListInput);
 
-		dataSource = new StringProvListInput("DataSource", "Key Inputs",
+		dataSource = new StringProvListInput("DataSource", KEY_INPUTS,
 				new ArrayList<StringProvider>());
 		dataSource.setUnitType(DimensionlessUnit.class);
 		dataSource.setEntity(this);
 		this.addInput(dataSource);
 
-		includeInitialization = new BooleanInput("IncludeInitialization", "Key Inputs", true);
+		includeInitialization = new BooleanInput("IncludeInitialization", KEY_INPUTS, true);
 		this.addInput(includeInitialization);
 
-		startTime = new ValueInput("StartTime", "Key Inputs", 0.0d);
+		startTime = new ValueInput("StartTime", KEY_INPUTS, 0.0d);
 		startTime.setUnitType(TimeUnit.class);
 		startTime.setValidRange(0.0d, Double.POSITIVE_INFINITY);
 		this.addInput(startTime);
 
-		endTime = new ValueInput("EndTime", "Key Inputs", Double.POSITIVE_INFINITY);
+		endTime = new ValueInput("EndTime", KEY_INPUTS, Double.POSITIVE_INFINITY);
 		endTime.setUnitType(TimeUnit.class);
 		endTime.setValidRange(0.0d, Double.POSITIVE_INFINITY);
 		this.addInput(endTime);

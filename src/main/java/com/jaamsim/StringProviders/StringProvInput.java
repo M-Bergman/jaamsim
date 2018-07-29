@@ -1,6 +1,7 @@
 /*
  * JaamSim Discrete Event Simulation
  * Copyright (C) 2015 Ausenco Engineering Canada Inc.
+ * Copyright (C) 2018 JaamSim Software Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,7 +26,10 @@ import com.jaamsim.basicsim.Entity;
 import com.jaamsim.input.Input;
 import com.jaamsim.input.InputErrorException;
 import com.jaamsim.input.KeywordIndex;
+import com.jaamsim.input.Parser;
+import com.jaamsim.units.DimensionlessUnit;
 import com.jaamsim.units.Unit;
+import com.jaamsim.units.UserSpecifiedUnit;
 
 public class StringProvInput extends Input<StringProvider> {
 
@@ -49,6 +53,21 @@ public class StringProvInput extends Input<StringProvider> {
 
 	public void setEntity(Entity ent) {
 		thisEnt = ent;
+	}
+
+	@Override
+	public void copyFrom(Input<?> in) {
+		super.copyFrom(in);
+
+		// An expression input must be re-parsed to reset the entity referred to by "this"
+		if (value instanceof StringProvExpression) {
+			parseFrom(in);
+		}
+	}
+
+	@Override
+	public String applyConditioning(String str) {
+		return Parser.addQuotesIfNeeded(str);
 	}
 
 	@Override
@@ -89,16 +108,42 @@ public class StringProvInput extends Input<StringProvider> {
 	}
 
 	@Override
-	public void removeReferences(Entity ent) {
+	public boolean removeReferences(Entity ent) {
 		if (value == null)
-			return;
+			return false;
 
 		if (value instanceof StringProvSample) {
 			StringProvSample spsamp = (StringProvSample) value;
 			if (spsamp.getSampleProvider() == ent) {
 				this.reset();
+				return true;
 			}
 		}
+		return false;
+	}
+
+	@Override
+	public boolean useExpressionBuilder() {
+		return true;
+	}
+
+	@Override
+	public String getPresentValueString(double simTime) {
+		if (value == null)
+			return "";
+
+		StringBuilder sb = new StringBuilder();
+		if (unitType == null || unitType == DimensionlessUnit.class
+				|| unitType == UserSpecifiedUnit.class) {
+			sb.append(value.getNextString(simTime, "%s", 1.0d));
+		}
+		else {
+			String unitString = Unit.getDisplayedUnit(unitType);
+			double sifactor = Unit.getDisplayedUnitFactor(unitType);
+			sb.append(value.getNextString(simTime, "%s", sifactor));
+			sb.append("[").append(unitString).append("]");
+		}
+		return sb.toString();
 	}
 
 }

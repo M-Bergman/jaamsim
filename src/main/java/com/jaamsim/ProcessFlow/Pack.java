@@ -40,6 +40,10 @@ public class Pack extends LinkedService {
 	         exampleList = {"2", "DiscreteDistribution1", "'1 + [TimeSeries1].PresentValue'"})
 	protected final SampleInput numberOfEntities;
 
+	@Keyword(description = "The minimum number of entities required to start packing.",
+	         exampleList = {"2", "DiscreteDistribution1", "'1 + [TimeSeries1].PresentValue'"})
+	private final SampleInput numberToStart;
+
 	@Keyword(description = "The service time required to pack each entity in the container.",
 	         exampleList = { "3.0 h", "ExponentialDistribution1", "'1[s] + 0.5*[TimeSeries1].PresentValue'" })
 	private final SampleInput serviceTime;
@@ -52,17 +56,24 @@ public class Pack extends LinkedService {
 	private DisplayEntity packedEntity;  // the entity being packed
 
 	{
-		prototypeEntityContainer = new EntityInput<>(EntityContainer.class, "PrototypeEntityContainer", "Key Inputs", null);
+		prototypeEntityContainer = new EntityInput<>(EntityContainer.class, "PrototypeEntityContainer", KEY_INPUTS, null);
 		prototypeEntityContainer.setRequired(true);
 		this.addInput(prototypeEntityContainer);
 
-		numberOfEntities = new SampleInput("NumberOfEntities", "Key Inputs", new SampleConstant(1.0));
+		numberOfEntities = new SampleInput("NumberOfEntities", KEY_INPUTS, new SampleConstant(1.0));
 		numberOfEntities.setUnitType(DimensionlessUnit.class);
 		numberOfEntities.setEntity(this);
 		numberOfEntities.setValidRange(0, Double.POSITIVE_INFINITY);
 		this.addInput(numberOfEntities);
 
-		serviceTime = new SampleInput("ServiceTime", "Key Inputs", new SampleConstant(TimeUnit.class, 0.0));
+		numberToStart = new SampleInput("NumberToStart", KEY_INPUTS, null);
+		numberToStart.setUnitType(DimensionlessUnit.class);
+		numberToStart.setEntity(this);
+		numberToStart.setDefaultText("NumberOfEntities Input");
+		numberToStart.setValidRange(0, Double.POSITIVE_INFINITY);
+		this.addInput(numberToStart);
+
+		serviceTime = new SampleInput("ServiceTime", KEY_INPUTS, new SampleConstant(TimeUnit.class, 0.0));
 		serviceTime.setUnitType(TimeUnit.class);
 		serviceTime.setEntity(this);
 		serviceTime.setValidRange(0, Double.POSITIVE_INFINITY);
@@ -101,16 +112,13 @@ public class Pack extends LinkedService {
 			// Set the state for the container and its contents
 			if (!stateAssignment.getValue().isEmpty())
 				container.setPresentState(stateAssignment.getValue());
-
-			// Position the container over the pack object
-			this.moveToProcessPosition(container);
 		}
 
 		// Are there sufficient entities in the queue to start packing?
 		if (!startedPacking) {
 			String m = this.getNextMatchValue(simTime);
 			numberToInsert = this.getNumberToInsert(simTime);
-			if (waitQueue.getValue().getMatchCount(m) < numberToInsert) {
+			if (waitQueue.getValue().getMatchCount(m) < getNumberToStart(simTime)) {
 				return false;
 			}
 			startedPacking = true;
@@ -119,12 +127,11 @@ public class Pack extends LinkedService {
 
 		// Select the next entity to pack and set its state
 		if (numberInserted < numberToInsert) {
+			if (waitQueue.getValue().getMatchCount(getMatchValue()) == 0)
+				return false;
 			packedEntity = this.getNextEntityForMatch(getMatchValue());
 			if (!stateAssignment.getValue().isEmpty() && packedEntity instanceof StateEntity)
 				((StateEntity)packedEntity).setPresentState(stateAssignment.getValue());
-
-			// Move the entity into position for processing
-			this.moveToProcessPosition(packedEntity);
 		}
 		return true;
 	}
@@ -156,9 +163,26 @@ public class Pack extends LinkedService {
 		return ret;
 	}
 
+	private int getNumberToStart(double simTime) {
+		int ret = numberToInsert;
+		if (!numberToStart.isDefault() && numberToInsert > 0) {
+			ret = (int) numberToStart.getValue().getNextSample(simTime);
+			ret = Math.max(ret, 1);
+		}
+		return ret;
+	}
+
 	@Override
 	protected double getStepDuration(double simTime) {
 		return serviceTime.getValue().getNextSample(simTime);
+	}
+
+	@Override
+	public void updateGraphics(double simTime) {
+		if (container != null)
+			moveToProcessPosition(container);
+		if (packedEntity != null)
+			moveToProcessPosition(packedEntity);
 	}
 
 	@Output(name = "Container",

@@ -1,7 +1,7 @@
 /*
  * JaamSim Discrete Event Simulation
  * Copyright (C) 2013 Ausenco Engineering Canada Inc.
- * Copyright (C) 2016 JaamSim Software Inc.
+ * Copyright (C) 2016-2018 JaamSim Software Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,9 +20,7 @@ package com.jaamsim.Samples;
 import java.util.ArrayList;
 import java.util.Collections;
 
-import com.jaamsim.BasicObjects.ExpressionEntity;
 import com.jaamsim.basicsim.Entity;
-import com.jaamsim.input.ExpError;
 import com.jaamsim.input.Input;
 import com.jaamsim.input.InputErrorException;
 import com.jaamsim.input.KeywordIndex;
@@ -66,22 +64,10 @@ public class SampleInput extends Input<SampleProvider> {
 	@Override
 	public void copyFrom(Input<?> in) {
 		super.copyFrom(in);
-		SampleInput inp = (SampleInput) in;
-		unitType = inp.unitType;
-		minValue = inp.minValue;
-		maxValue = inp.maxValue;
-		// thisEnt must not be reset. Assume that it has been set already to the new entity
 
 		// SampleExpressions must be re-parsed to reset the entity referred to by "this"
 		if (value instanceof SampleExpression) {
-			ArrayList<String> tmp = new ArrayList<>();
-			inp.getValueTokens(tmp);
-			try {
-				value = new SampleExpression(tmp.get(0), thisEnt, unitType);
-			}
-			catch (ExpError e) {
-				throw new InputErrorException(e);
-			}
+			parseFrom(in);
 		}
 	}
 
@@ -130,32 +116,36 @@ public class SampleInput extends Input<SampleProvider> {
 	}
 
 	@Override
-	public void validate() {
-		super.validate();
-
-		if (value == null) return;
-		if (value instanceof SampleExpression) return;
-		if (value instanceof ExpressionEntity) return;
-		if (value instanceof SampleConstant) return;
-
-		Input.assertUnitsMatch(unitType, value.getUnitType());
-
-		if (value.getMinValue() < minValue)
-			throw new InputErrorException("The minimum value allowed for keyword: '%s' is: %s.\n" +
-					"The specified entity: '%s' can return values as small as: %s.",
-					this.getKeyword(), minValue, ((Entity)value).getName(), value.getMinValue());
-
-		if (value.getMaxValue() > maxValue)
-			throw new InputErrorException("The maximum value allowed for keyword: '%s' is: %s.\n" +
-					"The specified entity: '%s' can return values as large as: %s.",
-					this.getKeyword(), maxValue, ((Entity)value).getName(), value.getMaxValue());
+	public boolean removeReferences(Entity ent) {
+		if (value == ent) {
+			this.reset();
+			return true;
+		}
+		return false;
 	}
 
 	@Override
-	public void removeReferences(Entity ent) {
-		if (value == ent) {
-			this.reset();
+	public boolean useExpressionBuilder() {
+		return true;
+	}
+
+	@Override
+	public String getPresentValueString(double simTime) {
+		if (value == null)
+			return "";
+
+		StringBuilder sb = new StringBuilder();
+		Class<? extends Unit> ut = value.getUnitType();
+		if (ut == DimensionlessUnit.class) {
+			sb.append(Double.toString(value.getNextSample(simTime)));
 		}
+		else {
+			String unitString = Unit.getDisplayedUnit(ut);
+			double sifactor = Unit.getDisplayedUnitFactor(ut);
+			sb.append(Double.toString(value.getNextSample(simTime)/sifactor));
+			sb.append("[").append(unitString).append("]");
+		}
+		return sb.toString();
 	}
 
 }

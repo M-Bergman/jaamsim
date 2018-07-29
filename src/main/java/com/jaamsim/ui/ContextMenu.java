@@ -1,6 +1,6 @@
 /*
  * JaamSim Discrete Event Simulation
- * Copyright (C) 2016-17 JaamSim Software Inc.
+ * Copyright (C) 2016-2018 JaamSim Software Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,19 +16,18 @@
  */
 package com.jaamsim.ui;
 
+import java.awt.Component;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.util.ArrayList;
 
 import javax.swing.JCheckBoxMenuItem;
-import javax.swing.JMenu;
 import javax.swing.JMenuItem;
 import javax.swing.JPopupMenu;
 import javax.swing.JRadioButtonMenuItem;
 
 import com.jaamsim.Commands.DefineCommand;
 import com.jaamsim.Commands.CoordinateCommand;
-import com.jaamsim.Commands.DeleteCommand;
 import com.jaamsim.Commands.KeywordCommand;
 import com.jaamsim.Graphics.DisplayEntity;
 import com.jaamsim.Graphics.EntityLabel;
@@ -79,7 +78,9 @@ public class ContextMenu {
 	 * @param x - screen coordinate for the menu
 	 * @param y - screen coordinate for the menu
 	 */
-	public static void populateMenu(JPopupMenu menu, final Entity ent, final int x, final int y) {
+	public static void populateMenu(JPopupMenu menu, final Entity ent, final int nodeIndex,
+			Component c, final int x, final int y) {
+
 		// 1) Input Editor
 		JMenuItem inputEditorMenuItem = new JMenuItem( "Input Editor" );
 		inputEditorMenuItem.addActionListener( new ActionListener() {
@@ -155,7 +156,7 @@ public class ContextMenu {
 		deleteMenuItem.addActionListener( new ActionListener() {
 			@Override
 			public void actionPerformed( ActionEvent event ) {
-				InputAgent.storeAndExecute(new DeleteCommand(ent));
+				ent.delete();
 				FrameBox.setSelectedEntity(null, false);
 			}
 		} );
@@ -163,7 +164,7 @@ public class ContextMenu {
 
 		// DisplayEntity menu items
 		if (ent instanceof DisplayEntity) {
-			ContextMenu.populateDisplayEntityMenu(menu, (DisplayEntity)ent, x, y);
+			ContextMenu.populateDisplayEntityMenu(menu, (DisplayEntity)ent, nodeIndex, c, x, y);
 		}
 
 		synchronized (menuItems) {
@@ -174,7 +175,8 @@ public class ContextMenu {
 		}
 	}
 
-	public static void populateDisplayEntityMenu(JPopupMenu menu, final DisplayEntity ent, final int x, final int y) {
+	public static void populateDisplayEntityMenu(JPopupMenu menu, final DisplayEntity ent, final int nodeIndex,
+			final Component c, final int x, final int y) {
 
 		if (!RenderManager.isGood())
 			return;
@@ -185,7 +187,7 @@ public class ContextMenu {
 
 			@Override
 			public void actionPerformed( ActionEvent event ) {
-				GraphicBox graphicBox = GraphicBox.getInstance(ent, x, y);
+				GraphicBox graphicBox = GraphicBox.getInstance(ent, c, x, y);
 				graphicBox.setVisible( true );
 			}
 		} );
@@ -220,8 +222,7 @@ public class ContextMenu {
 						double ypos = -0.15 - 0.5*ent.getSize().y;
 						InputAgent.apply(newLabel, InputAgent.formatPointInputs("Position", new Vec3d(0.0, ypos, 0.0), "m"));
 
-						// Set the text size
-						InputAgent.applyArgs(newLabel, "TextHeight", "0.15", "m");
+						// Set the label's size
 						newLabel.resizeForText();
 						return;
 					}
@@ -243,7 +244,7 @@ public class ContextMenu {
 		menu.add( showLabelMenuItem );
 
 		// 3) Set RelativeEntity
-		JMenu setRelativeEntityMenu = new JMenu( "Set RelativeEntity" );
+		ScrollableMenu setRelativeEntityMenu = new ScrollableMenu( "Set RelativeEntity" );
 		ArrayList<String> entNameList = new ArrayList<>();
 		entNameList.add("<None>");
 		entNameList.addAll(ent.getRelativeEntityOptions());
@@ -278,7 +279,7 @@ public class ContextMenu {
 		menu.add( setRelativeEntityMenu );
 
 		// 4) Set Region
-		JMenu setRegionMenu = new JMenu( "Set Region" );
+		ScrollableMenu setRegionMenu = new ScrollableMenu( "Set Region" );
 		ArrayList<String> regionNameList = new ArrayList<>();
 		regionNameList.add("<None>");
 		regionNameList.addAll(ent.getRegionOptions());
@@ -333,5 +334,67 @@ public class ContextMenu {
 			centerInViewMenuItem.setEnabled(false);
 		}
 		menu.add( centerInViewMenuItem );
+
+		// 6) Split
+		JMenuItem spitMenuItem = new JMenuItem( "Split" );
+		spitMenuItem.addActionListener( new ActionListener() {
+
+			@Override
+			public void actionPerformed( ActionEvent event ) {
+				String name = InputAgent.getUniqueName(ent.getName(), "_Split");
+				InputAgent.storeAndExecute(new DefineCommand(ent.getClass(), name));
+				DisplayEntity splitEnt = (DisplayEntity) Entity.getNamedEntity(name);
+
+				// Match all the inputs
+				splitEnt.copyInputs(ent);
+
+				// Original entity is left with the first portion of the nodes
+				ArrayList<Vec3d> pts = ent.getPoints();
+				ArrayList<Vec3d> pts0 = new ArrayList<>(nodeIndex + 1);
+				for (int i = 0; i <= nodeIndex; i++) {
+					pts0.add(pts.get(i));
+				}
+				KeywordIndex ptsKw0 = InputAgent.formatPointsInputs("Points", pts0, new Vec3d());
+				InputAgent.storeAndExecute(new KeywordCommand(ent, nodeIndex, ptsKw0));
+
+				// New entity receives the remaining portion of the nodes
+				ArrayList<Vec3d> pts1 = new ArrayList<>(pts.size() - nodeIndex);
+				for (int i = nodeIndex; i < pts.size(); i++) {
+					pts1.add(pts.get(i));
+				}
+				KeywordIndex ptsKw1 = InputAgent.formatPointsInputs("Points", pts1, new Vec3d());
+				InputAgent.processKeyword(splitEnt, ptsKw1);
+
+				// Change any other object specific inputs for the split
+				ent.setInputsForSplit(splitEnt);
+
+				// Show the split entity in the editors and viewers
+				FrameBox.setSelectedEntity(splitEnt, false);
+			}
+		} );
+		if (ent.testFlag(Entity.FLAG_GENERATED) || nodeIndex <= 0
+				|| nodeIndex == ent.getPoints().size() - 1) {
+			spitMenuItem.setEnabled(false);
+		}
+		menu.add( spitMenuItem );
+
+		// 7) Delete Node
+		JMenuItem deleteNodeItem = new JMenuItem( "Delete Node" );
+		deleteNodeItem.addActionListener( new ActionListener() {
+
+			@Override
+			public void actionPerformed( ActionEvent event ) {
+				ArrayList<Vec3d> pts = ent.getPoints();
+				pts.remove(nodeIndex);
+				KeywordIndex ptsKw = InputAgent.formatPointsInputs("Points", pts, new Vec3d());
+				InputAgent.storeAndExecute(new KeywordCommand(ent, nodeIndex, ptsKw));
+			}
+		} );
+		if (ent.testFlag(Entity.FLAG_GENERATED) || nodeIndex == -1
+				|| ent.getPoints().size() <= 2) {
+			deleteNodeItem.setEnabled(false);
+		}
+		menu.add( deleteNodeItem );
 	}
+
 }

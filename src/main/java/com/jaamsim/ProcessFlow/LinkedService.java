@@ -1,7 +1,7 @@
 /*
  * JaamSim Discrete Event Simulation
  * Copyright (C) 2014 Ausenco Engineering Canada Inc.
- * Copyright (C) 2016-2017 JaamSim Software Inc.
+ * Copyright (C) 2016-2018 JaamSim Software Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -60,15 +60,15 @@ public abstract class LinkedService extends LinkedDevice implements QueueUser {
 		stateGraphics.setHidden(false);
 		workingStateListInput.setHidden(false);
 
-		processPosition = new Vec3dInput("ProcessPosition", "Key Inputs", new Vec3d(0.0d, 0.0d, 0.01d));
+		processPosition = new Vec3dInput("ProcessPosition", KEY_INPUTS, new Vec3d(0.0d, 0.0d, 0.01d));
 		processPosition.setUnitType(DistanceUnit.class);
 		this.addInput(processPosition);
 
-		waitQueue = new EntityInput<>(Queue.class, "WaitQueue", "Key Inputs", null);
+		waitQueue = new EntityInput<>(Queue.class, "WaitQueue", KEY_INPUTS, null);
 		waitQueue.setRequired(true);
 		this.addInput(waitQueue);
 
-		match = new StringProvInput("Match", "Key Inputs", null);
+		match = new StringProvInput("Match", KEY_INPUTS, null);
 		match.setUnitType(DimensionlessUnit.class);
 		match.setEntity(this);
 		this.addInput(match);
@@ -160,7 +160,7 @@ public abstract class LinkedService extends LinkedDevice implements QueueUser {
 	@Override
 	public void queueChanged() {
 		if (isTraceFlag()) trace(0, "queueChanged");
-		this.startStep();
+		this.restart();
 	}
 
 	// ********************************************************************************************

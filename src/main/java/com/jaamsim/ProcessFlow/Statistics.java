@@ -1,6 +1,7 @@
 /*
  * JaamSim Discrete Event Simulation
  * Copyright (C) 2014 Ausenco Engineering Canada Inc.
+ * Copyright (C) 2018 JaamSim Software Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,12 +17,24 @@
  */
 package com.jaamsim.ProcessFlow;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 import com.jaamsim.Graphics.DisplayEntity;
 import com.jaamsim.Samples.SampleInput;
+import com.jaamsim.Statistics.SampleFrequency;
+import com.jaamsim.Statistics.SampleStatistics;
+import com.jaamsim.Statistics.TimeBasedStatistics;
+import com.jaamsim.events.EventManager;
 import com.jaamsim.input.Input;
 import com.jaamsim.input.Keyword;
 import com.jaamsim.input.Output;
 import com.jaamsim.input.UnitTypeInput;
+import com.jaamsim.input.ValueInput;
+import com.jaamsim.states.StateEntity;
+import com.jaamsim.states.StateRecord;
+import com.jaamsim.units.DimensionlessUnit;
+import com.jaamsim.units.TimeUnit;
 import com.jaamsim.units.Unit;
 import com.jaamsim.units.UserSpecifiedUnit;
 
@@ -40,28 +53,32 @@ public class Statistics extends LinkedComponent {
 	         exampleList = {"'this.obj.attrib1'"})
 	private final SampleInput sampleValue;
 
-	private double minValue;
-	private double maxValue;
-	private double totalValue;
-	private double totalSquaredValue;
-	private double lastValue;
-	private double lastUpdateTime;
-	private double totalTimeValue;
-	private double totalSquaredTimeValue;
-	private double firstSampleTime;
+	@Keyword(description = "Width of the histogram bins into which the recorded values are "
+	                     + "placed. Histogram data will not be generated if the input is left "
+	                     + "blank.",
+	         exampleList = {"1 h"})
+	private final ValueInput histogramBinWidth;
+
+	private final SampleStatistics sampStats = new SampleStatistics();
+	private final TimeBasedStatistics timeStats = new TimeBasedStatistics();
+	private final SampleFrequency freq = new SampleFrequency(0, 10);
+	private final LinkedHashMap<String, SampleStatistics> stateStats = new LinkedHashMap<>();
 
 	{
 		stateAssignment.setHidden(true);
 
-		unitType = new UnitTypeInput("UnitType", "Key Inputs", UserSpecifiedUnit.class);
+		unitType = new UnitTypeInput("UnitType", KEY_INPUTS, UserSpecifiedUnit.class);
 		unitType.setRequired(true);
 		this.addInput(unitType);
 
-		sampleValue = new SampleInput("SampleValue", "Key Inputs", null);
+		sampleValue = new SampleInput("SampleValue", KEY_INPUTS, null);
 		sampleValue.setUnitType(UserSpecifiedUnit.class);
 		sampleValue.setEntity(this);
-		sampleValue.setRequired(true);
 		this.addInput(sampleValue);
+
+		histogramBinWidth = new ValueInput("HistogramBinWidth", KEY_INPUTS, null);
+		histogramBinWidth.setUnitType(UserSpecifiedUnit.class);
+		this.addInput(histogramBinWidth);
 	}
 
 	public Statistics() {}
@@ -73,6 +90,7 @@ public class Statistics extends LinkedComponent {
 		if (in == unitType) {
 			Class<? extends Unit> ut = unitType.getUnitType();
 			sampleValue.setUnitType(ut);
+			histogramBinWidth.setUnitType(ut);
 			return;
 		}
 	}
@@ -80,17 +98,10 @@ public class Statistics extends LinkedComponent {
 	@Override
 	public void earlyInit() {
 		super.earlyInit();
-
-		minValue = Double.POSITIVE_INFINITY;
-		maxValue = Double.NEGATIVE_INFINITY;
-		totalValue = 0.0;
-		totalSquaredValue = 0.0;
-
-		lastValue = 0.0;
-		lastUpdateTime = 0.0;
-		totalTimeValue = 0.0;
-		totalSquaredTimeValue = 0.0;
-		firstSampleTime = 0.0;
+		sampStats.clear();
+		timeStats.clear();
+		freq.clear();
+		stateStats.clear();
 	}
 
 	@Override
@@ -99,23 +110,28 @@ public class Statistics extends LinkedComponent {
 		double simTime = this.getSimTime();
 
 		// Update the statistics
-		double val = sampleValue.getValue().getNextSample(simTime);
-		minValue = Math.min(minValue, val);
-		maxValue = Math.max(maxValue, val);
-		totalValue += val;
-		totalSquaredValue += val*val;
+		if (!sampleValue.isDefault()) {
+			double val = sampleValue.getValue().getNextSample(simTime);
+			sampStats.addValue(val);
+			timeStats.addValue(simTime, val);
+			if (!histogramBinWidth.isDefault()) {
+				freq.addValue((int) Math.round(val/histogramBinWidth.getValue()));
+			}
+		}
 
-		// Calculate the time average
-		if (this.getNumberAdded(simTime) == 1L) {
-			firstSampleTime = simTime;
+		// Update the statistics for each of the entity's states
+		if (ent instanceof StateEntity) {
+			StateEntity se = (StateEntity) ent;
+			for (StateRecord rec : se.getStateRecs()) {
+				SampleStatistics durStats = stateStats.get(rec.name);
+				if (durStats == null) {
+					durStats = new SampleStatistics();
+					stateStats.put(rec.name, durStats);
+				}
+				double dur = EventManager.ticksToSecs(se.getTicksInState(rec));
+				durStats.addValue(dur);
+			}
 		}
-		else {
-			double weightedVal = lastValue * (simTime - lastUpdateTime);
-			totalTimeValue += weightedVal;
-			totalSquaredTimeValue += lastValue*weightedVal;
-		}
-		lastValue = val;
-		lastUpdateTime = simTime;
 
 		// Pass the entity to the next component
 		this.sendToNextComponent(ent);
@@ -124,17 +140,10 @@ public class Statistics extends LinkedComponent {
 	@Override
 	public void clearStatistics() {
 		super.clearStatistics();
-
-		minValue = Double.POSITIVE_INFINITY;
-		maxValue = Double.NEGATIVE_INFINITY;
-		totalValue = 0.0;
-		totalSquaredValue = 0.0;
-
-		totalTimeValue = 0.0;
-		lastValue = 0.0;
-		lastUpdateTime = 0.0;
-		totalSquaredTimeValue = 0.0;
-		firstSampleTime = 0.0;
+		sampStats.clear();
+		timeStats.clear();
+		freq.clear();
+		stateStats.clear();
 	}
 
 	@Override
@@ -183,7 +192,7 @@ public class Statistics extends LinkedComponent {
 	  reportable = true,
 	    sequence = 0)
 	public double getSampleMinimum(double simTime) {
-		return minValue;
+		return sampStats.getMin();
 	}
 
 	@Output(name = "SampleMaximum",
@@ -192,7 +201,7 @@ public class Statistics extends LinkedComponent {
 	  reportable = true,
 	    sequence = 1)
 	public double getSampleMaximum(double simTime) {
-		return maxValue;
+		return sampStats.getMax();
 	}
 
 	@Output(name = "SampleAverage",
@@ -201,10 +210,7 @@ public class Statistics extends LinkedComponent {
 	  reportable = true,
 	    sequence = 2)
 	public double getSampleAverage(double simTime) {
-		long num = this.getNumberAdded(simTime);
-		if (num == 0L)
-			return 0.0d;
-		return totalValue/num;
+		return sampStats.getMean();
 	}
 
 	@Output(name = "SampleStandardDeviation",
@@ -213,11 +219,7 @@ public class Statistics extends LinkedComponent {
 	  reportable = true,
 	    sequence = 3)
 	public double getSampleStandardDeviation(double simTime) {
-		long num = this.getNumberAdded(simTime);
-		if (num == 0L)
-			return 0.0d;
-		double mean = totalValue/num;
-		return Math.sqrt(totalSquaredValue/num - mean*mean);
+		return sampStats.getStandardDeviation();
 	}
 
 	@Output(name = "StandardDeviationOfTheMean",
@@ -226,10 +228,7 @@ public class Statistics extends LinkedComponent {
 	  reportable = true,
 	    sequence = 4)
 	public double getStandardDeviationOfTheMean(double simTime) {
-		long num = this.getNumberAdded(simTime);
-		if (num <= 1L)
-			return 0.0d;
-		return this.getSampleStandardDeviation(simTime)/Math.sqrt(num-1L);
+		return sampStats.getStandardDeviation()/Math.sqrt(sampStats.getCount() - 1L);
 	}
 
 	@Output(name = "TimeAverage",
@@ -238,13 +237,7 @@ public class Statistics extends LinkedComponent {
 	  reportable = true,
 	    sequence = 5)
 	public double getTimeAverage(double simTime) {
-		long num = this.getNumberAdded(simTime);
-		if (num == 0L)
-			return 0.0d;
-		if (num == 1L)
-			return lastValue;
-		double dt = simTime - lastUpdateTime;
-		return (totalTimeValue + lastValue*dt)/(simTime - firstSampleTime);
+		return timeStats.getMean(simTime);
 	}
 
 	@Output(name = "TimeStandardDeviation",
@@ -253,13 +246,101 @@ public class Statistics extends LinkedComponent {
 	  reportable = true,
 	    sequence = 6)
 	public double getTimeStandardDeviation(double simTime) {
-		long num = this.getNumberAdded(simTime);
-		if (num <= 1L)
-			return 0.0d;
-		double mean = this.getTimeAverage(simTime);
-		double dt = simTime - lastUpdateTime;
-		double meanOfSquare = (totalSquaredTimeValue + lastValue*lastValue*dt)/(simTime - firstSampleTime);
-		return Math.sqrt(meanOfSquare - mean*mean);
+		return timeStats.getStandardDeviation(simTime);
+	}
+
+	@Output(name = "HistogramBinCentres",
+	 description = "The central value for each histogram bin.",
+	    unitType = UserSpecifiedUnit.class,
+	  reportable = true,
+	    sequence = 7)
+	public double[] getHistogramBinCentres(double simTime) {
+		if (histogramBinWidth.isDefault()) {
+			return new double[0];
+		}
+		int[] binVals = freq.getBinValues();
+		double[] ret = new double[binVals.length];
+		for (int i = 0; i < binVals.length; i++) {
+			ret[i] = histogramBinWidth.getValue() * binVals[i];
+		}
+		return ret;
+	}
+
+	@Output(name = "HistogramBinFractions",
+	 description = "The fractional number of values within each histogram bin.",
+	    unitType = DimensionlessUnit.class,
+	  reportable = true,
+	    sequence = 8)
+	public double[] getHistogramBinFractions(double simTime) {
+		if (histogramBinWidth.isDefault()) {
+			return new double[0];
+		}
+		return freq.getBinFractions();
+	}
+
+	@Output(name = "EntityTimeMinimum",
+	 description = "The minimum time the received entities have spent in each state.",
+	    unitType = TimeUnit.class,
+	  reportable = true,
+	    sequence = 9)
+	public LinkedHashMap<String, Double> getEntityTimeMinimum(double simTime) {
+		long num = getNumberProcessed(simTime);
+		LinkedHashMap<String, Double> ret = new LinkedHashMap<>(stateStats.size());
+		for (Map.Entry<String, SampleStatistics> entry : stateStats.entrySet()) {
+			double min = entry.getValue().getMin();
+			if (entry.getValue().getCount() < num) {
+				min = 0.0d;
+			}
+			ret.put(entry.getKey(), min);
+		}
+		return ret;
+	}
+
+	@Output(name = "EntityTimeMaximum",
+	 description = "The maximum time the received entities have spent in each state.",
+	    unitType = TimeUnit.class,
+	  reportable = true,
+	    sequence = 10)
+	public LinkedHashMap<String, Double> getEntityTimeMaximum(double simTime) {
+		LinkedHashMap<String, Double> ret = new LinkedHashMap<>(stateStats.size());
+		for (Map.Entry<String, SampleStatistics> entry : stateStats.entrySet()) {
+			double max = entry.getValue().getMax();
+			ret.put(entry.getKey(), max);
+		}
+		return ret;
+	}
+
+	@Output(name = "EntityTimeAverage",
+	 description = "The average time the received entities have spent in each state.",
+	    unitType = TimeUnit.class,
+	  reportable = true,
+	    sequence = 11)
+	public LinkedHashMap<String, Double> getEntityTimeAverage(double simTime) {
+		long num = getNumberProcessed(simTime);
+		LinkedHashMap<String, Double> ret = new LinkedHashMap<>(stateStats.size());
+		for (Map.Entry<String, SampleStatistics> entry : stateStats.entrySet()) {
+			double mean = entry.getValue().getSum() / num;
+			ret.put(entry.getKey(), mean);
+		}
+		return ret;
+	}
+
+	@Output(name = "EntityTimeStandardDeviation",
+	 description = "The standard deviation of the time the received entities have spent in "
+	             + "each state.",
+	    unitType = TimeUnit.class,
+	  reportable = true,
+	    sequence = 12)
+	public LinkedHashMap<String, Double> getEntityTimeStandardDeviation(double simTime) {
+		long num = getNumberProcessed(simTime);
+		LinkedHashMap<String, Double> ret = new LinkedHashMap<>(stateStats.size());
+		for (Map.Entry<String, SampleStatistics> entry : stateStats.entrySet()) {
+			double mean = entry.getValue().getSum() / num;
+			double meanSquared = entry.getValue().getSumSquared() / num;
+			double sd = Math.sqrt(meanSquared - mean*mean);
+			ret.put(entry.getKey(), sd);
+		}
+		return ret;
 	}
 
 }

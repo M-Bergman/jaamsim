@@ -1,6 +1,7 @@
 /*
  * JaamSim Discrete Event Simulation
  * Copyright (C) 2009-2011 Ausenco Engineering Canada Inc.
+ * Copyright (C) 2017 JaamSim Software Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,38 +22,42 @@ import com.jaamsim.input.Input;
 import com.jaamsim.input.Keyword;
 import com.jaamsim.input.ValueInput;
 import com.jaamsim.input.Vec3dInput;
+import com.jaamsim.math.Color4d;
 import com.jaamsim.math.Vec3d;
 import com.jaamsim.units.DimensionlessUnit;
 import com.jaamsim.units.DistanceUnit;
 
 public class Arrow extends DisplayEntity {
 
-	@Keyword(description = "The width of the Arrow line segments in pixels.",
-	         exampleList = {"1"})
-	private final ValueInput width;
-
-	@Keyword(description = "A set of { x, y, z } numbers that define the size of the arrowhead " +
-	                "in those directions at the end of the connector.",
-	         exampleList = {"0.165 0.130 0.0 m"})
-	private final Vec3dInput arrowHeadSize;
-
 	@Keyword(description = "The colour of the arrow.",
 	         exampleList = {"red"})
 	private final ColourInput color;
 
+	@Keyword(description = "The width of the Arrow line segments in pixels.",
+	         exampleList = {"1"})
+	private final ValueInput width;
+
+	@Keyword(description = "A set of (x, y, z) numbers that define the size of the arrowhead.",
+	         exampleList = {"0.165 0.130 0.0 m"})
+	private final Vec3dInput arrowHeadSize;
+
 	{
-		width = new ValueInput("Width", "Graphics", 1.0d);
+		color = new ColourInput("Colour", GRAPHICS, ColourInput.BLACK);
+		color.setDefaultText("PolylineModel");
+		this.addInput(color);
+		this.addSynonym(color, "Color");
+
+		width = new ValueInput("Width", GRAPHICS, 1.0d);
 		width.setUnitType(DimensionlessUnit.class);
 		width.setValidRange(0.0d, Double.POSITIVE_INFINITY);
+		width.setDefaultText("PolylineModel");
 		this.addInput(width);
 
-		arrowHeadSize = new Vec3dInput( "ArrowSize", "Graphics", new Vec3d(0.1d, 0.1d, 0.0d) );
+		arrowHeadSize = new Vec3dInput( "ArrowHeadSize", GRAPHICS, new Vec3d(0.1d, 0.1d, 0.0d) );
 		arrowHeadSize.setUnitType(DistanceUnit.class);
+		arrowHeadSize.setDefaultText("PolylineModel");
 		this.addInput( arrowHeadSize );
-
-		color = new ColourInput("Color", "Graphics", ColourInput.BLACK);
-		this.addInput(color);
-		this.addSynonym(color, "Colour");
+		this.addSynonym(arrowHeadSize, "ArrowSize");
 	}
 
 	public Arrow() {}
@@ -70,14 +75,21 @@ public class Arrow extends DisplayEntity {
 
 	@Override
 	public PolylineInfo[] buildScreenPoints(double simTime) {
-		int w = Math.max(1, width.getValue().intValue());
+		int wid = -1;
+		if (!width.isDefault())
+			wid = Math.max(1, width.getValue().intValue());
+
+		Color4d col = null;
+		if (!color.isDefault())
+			col = color.getValue();
+
 		PolylineInfo[] ret = new PolylineInfo[1];
-		ret[0] = new PolylineInfo(getCurvePoints(), color.getValue(), w);
+		ret[0] = new PolylineInfo(getCurvePoints(), col, wid);
 		return ret;
 	}
 
-	public Vec3d getArrowHeadSize() {
-		return arrowHeadSize.getValue();
+	public Vec3dInput getArrowHeadSizeInput() {
+		return arrowHeadSize;
 	}
 
 }

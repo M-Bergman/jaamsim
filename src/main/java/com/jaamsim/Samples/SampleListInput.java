@@ -1,7 +1,7 @@
 /*
  * JaamSim Discrete Event Simulation
  * Copyright (C) 2015 Ausenco Engineering Canada Inc.
- * Copyright (C) 2017 JaamSim Software Inc.
+ * Copyright (C) 2017-2018 JaamSim Software Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,6 +25,7 @@ import com.jaamsim.input.Input;
 import com.jaamsim.input.InputErrorException;
 import com.jaamsim.input.KeywordIndex;
 import com.jaamsim.input.ListInput;
+import com.jaamsim.units.DimensionlessUnit;
 import com.jaamsim.units.Unit;
 
 public class SampleListInput extends ListInput<ArrayList<SampleProvider>> {
@@ -94,6 +95,14 @@ public class SampleListInput extends ListInput<ArrayList<SampleProvider>> {
 	}
 
 	@Override
+	public void copyFrom(Input<?> in) {
+		super.copyFrom(in);
+
+		// An expression input must be re-parsed to reset the entity referred to by "this"
+		parseFrom(in);
+	}
+
+	@Override
 	public void parse(KeywordIndex kw)
 	throws InputErrorException {
 		ArrayList<KeywordIndex> subArgs = kw.getSubArgs();
@@ -158,33 +167,6 @@ public class SampleListInput extends ListInput<ArrayList<SampleProvider>> {
 	}
 
 	@Override
-	public void validate() {
-		super.validate();
-
-		if (value == null)
-			return;
-
-		for (int i=0; i<value.size(); i++) {
-			SampleProvider sp = value.get(i);
-
-			if (sp instanceof SampleExpression) continue;
-			if (sp instanceof SampleConstant) continue;
-
-			Input.assertUnitsMatch(sp.getUnitType(), getUnitType(i));
-
-			if (sp.getMinValue() < minValue)
-				throw new InputErrorException("The minimum value allowed for keyword: '%s' is: %s.\n" +
-						"The specified entity: '%s' can return values as small as: %s.",
-						this.getKeyword(), minValue, ((Entity)sp).getName(), sp.getMinValue());
-
-			if (sp.getMaxValue() > maxValue)
-				throw new InputErrorException("The maximum value allowed for keyword: '%s' is: %s.\n" +
-						"The specified entity: '%s' can return values as large as: %s.",
-						this.getKeyword(), maxValue, ((Entity)sp).getName(), sp.getMaxValue());
-		}
-	}
-
-	@Override
 	public String getDefaultString() {
 		if (defValue == null || defValue.isEmpty()) {
 			return "";
@@ -204,10 +186,46 @@ public class SampleListInput extends ListInput<ArrayList<SampleProvider>> {
 	}
 
 	@Override
-	public void removeReferences(Entity ent) {
+	public boolean removeReferences(Entity ent) {
 		if (value == null)
-			return;
-		value.removeAll(Collections.singleton(ent));
+			return false;
+		boolean ret = value.removeAll(Collections.singleton(ent));
+		return ret;
+	}
+
+	@Override
+	public boolean useExpressionBuilder() {
+		return true;
+	}
+
+	@Override
+	public String getPresentValueString(double simTime) {
+		if (value == null)
+			return "";
+
+		StringBuilder sb = new StringBuilder();
+		boolean first = true;
+		for (SampleProvider samp : value) {
+			if (!first) {
+				first = false;
+			}
+			else {
+				sb.append(Input.SEPARATOR);
+			}
+			sb.append("{").append(Input.BRACE_SEPARATOR);
+			Class<? extends Unit> ut = samp.getUnitType();
+			if (ut == DimensionlessUnit.class) {
+				sb.append(Double.toString(samp.getNextSample(simTime)));
+			}
+			else {
+				String unitString = Unit.getDisplayedUnit(ut);
+				double sifactor = Unit.getDisplayedUnitFactor(ut);
+				sb.append(Double.toString(samp.getNextSample(simTime)/sifactor));
+				sb.append("[").append(unitString).append("]");
+			}
+			sb.append(Input.BRACE_SEPARATOR).append("}");
+		}
+		return sb.toString();
 	}
 
 }

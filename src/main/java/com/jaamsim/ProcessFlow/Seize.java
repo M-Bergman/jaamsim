@@ -1,7 +1,7 @@
 /*
  * JaamSim Discrete Event Simulation
  * Copyright (C) 2013 Ausenco Engineering Canada Inc.
- * Copyright (C) 2017 JaamSim Software Inc.
+ * Copyright (C) 2017-2018 JaamSim Software Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,11 +30,11 @@ import com.jaamsim.input.Keyword;
 import com.jaamsim.input.Output;
 import com.jaamsim.units.DimensionlessUnit;
 
-public class Seize extends LinkedService {
+public class Seize extends LinkedService implements ResourceUser {
 
 	@Keyword(description = "The Resources from which units are to be seized.",
 	         exampleList = {"Resource1 Resource2"})
-	private final EntityListInput<Resource> resourceList;
+	protected final EntityListInput<Resource> resourceList;
 
 	@Keyword(description = "The number of units to seize from the Resources specified by the "
 	                     + "'ResourceList' keyword.",
@@ -53,14 +53,18 @@ public class Seize extends LinkedService {
 		forcedBreakdownList.setHidden(true);
 		opportunisticBreakdownList.setHidden(true);
 
-		resourceList = new EntityListInput<>(Resource.class, "ResourceList", "Key Inputs", null);
+		immediateThresholdList.setHidden(true);
+		immediateReleaseThresholdList.setHidden(true);
+
+		ArrayList<Resource> resDef = new ArrayList<>();
+		resourceList = new EntityListInput<>(Resource.class, "ResourceList", KEY_INPUTS, resDef);
 		resourceList.setRequired(true);
 		this.addInput(resourceList);
 		this.addSynonym(resourceList, "Resource");
 
 		ArrayList<SampleProvider> def = new ArrayList<>();
 		def.add(new SampleConstant(1));
-		numberOfUnitsList = new SampleListInput("NumberOfUnits", "Key Inputs", def);
+		numberOfUnitsList = new SampleListInput("NumberOfUnits", KEY_INPUTS, def);
 		numberOfUnitsList.setEntity(this);
 		numberOfUnitsList.setValidRange(0, Double.POSITIVE_INFINITY);
 		numberOfUnitsList.setDimensionless(true);
@@ -68,10 +72,14 @@ public class Seize extends LinkedService {
 		this.addInput(numberOfUnitsList);
 	}
 
+	public Seize() {}
+
 	@Override
 	public void validate() {
 		super.validate();
-		Input.validateInputSize(resourceList, numberOfUnitsList);
+		if (!resourceList.getValue().isEmpty()) {
+			Input.validateInputSize(resourceList, numberOfUnitsList);
+		}
 	}
 
 	@Override
@@ -82,26 +90,21 @@ public class Seize extends LinkedService {
 
 	@Override
 	public void queueChanged() {
-		this.startProcessing(getSimTime());
+		if (isReadyToStart()) {
+			Resource.notifyResourceUsers(getResourceList());
+		}
+	}
+
+	@Override
+	public void thresholdChanged() {
+		if (isReadyToStart()) {
+			Resource.notifyResourceUsers(getResourceList());
+		}
+		super.thresholdChanged();
 	}
 
 	@Override
 	protected boolean startProcessing(double simTime) {
-
-		// Stop if the queue is empty, there are insufficient resources, or a threshold is closed
-		while (this.isReadyToStart()) {
-
-			// Determine the match value
-			String m = this.getNextMatchValue(simTime);
-			this.setMatchValue(m);
-
-			// If sufficient units are available, then seize them and pass the entity to the next component
-			this.seizeResources();
-			DisplayEntity ent = this.getNextEntityForMatch(m);
-			if (ent == null)
-				error("Entity not found for specified Match value: %s", m);
-			this.sendToNextComponent(ent);
-		}
 		return false;
 	}
 
@@ -115,23 +118,69 @@ public class Seize extends LinkedService {
 		return true;
 	}
 
-	public boolean isReadyToStart() {
+	@Override
+	public boolean hasWaitingEntity() {
+		return !getQueue().isEmpty();
+	}
+
+	@Override
+	public int getPriority() {
+		return getQueue().getFirstPriority();
+	}
+
+	@Override
+	public double getWaitTime() {
+		return getQueue().getQueueTime();
+	}
+
+	@Override
+	public void startNextEntity() {
+		if (isTraceFlag()) trace(2, "startNextEntity");
+
+		// Remove the first entity from the queue
 		String m = this.getNextMatchValue(getSimTime());
-		return waitQueue.getValue().getMatchCount(m) != 0 && this.checkResources() && this.isOpen();
+		DisplayEntity ent = waitQueue.getValue().removeFirstForMatch(m);
+		if (ent == null)
+			error("Entity not found for specified Match value: %s", m);
+		this.registerEntity(ent);
+
+		// Seize the resources and pass the entity to the next component
+		this.seizeResources();
+		this.sendToNextComponent(ent);
+	}
+
+	@Override
+	public boolean hasStrictResource() {
+		for (Resource res : getResourceList()) {
+			if (res.isStrictOrder()) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	@Override
+	public boolean isReadyToStart() {
+		if (!isOpen() || isForcedDowntimePending() || isImmediateDowntimePending()) {
+			return false;
+		}
+		String m = this.getNextMatchValue(getSimTime());
+		DisplayEntity ent = waitQueue.getValue().getFirstForMatch(m);
+		return ent != null && checkResources(ent);
 	}
 
 	/**
 	 * Determine whether the required Resources are available.
 	 * @return = TRUE if all the resources are available
 	 */
-	public boolean checkResources() {
+	public boolean checkResources(DisplayEntity ent) {
 		double simTime = this.getSimTime();
 
 		// Temporarily set the obj entity to the first one in the queue
 		DisplayEntity oldEnt = this.getReceivedEntity(simTime);
-		this.setReceivedEntity(waitQueue.getValue().getFirst());
+		this.setReceivedEntity(ent);
 
-		ArrayList<Resource> resList = resourceList.getValue();
+		ArrayList<Resource> resList = getResourceList();
 		ArrayList<SampleProvider> numberList = numberOfUnitsList.getValue();
 		for (int i=0; i<resList.size(); i++) {
 			if (resList.get(i).getAvailableUnits(simTime) < (int) numberList.get(i).getNextSample(simTime)) {
@@ -139,6 +188,7 @@ public class Seize extends LinkedService {
 				return false;
 			}
 		}
+		this.setReceivedEntity(oldEnt);
 		return true;
 	}
 
@@ -147,6 +197,8 @@ public class Seize extends LinkedService {
 	 */
 	public void seizeResources() {
 		double simTime = this.getSimTime();
+		if (getResourceList().isEmpty())
+			return;
 
 		// Set the number of resources to seize
 		ArrayList<SampleProvider> numberList = numberOfUnitsList.getValue();
@@ -155,7 +207,7 @@ public class Seize extends LinkedService {
 		}
 
 		// Seize the resources
-		ArrayList<Resource> resList = resourceList.getValue();
+		ArrayList<Resource> resList = getResourceList();
 		for (int i=0; i<resList.size(); i++) {
 			resList.get(i).seize(seizedUnits[i]);
 		}
@@ -165,15 +217,15 @@ public class Seize extends LinkedService {
 		return waitQueue.getValue();
 	}
 
-	/**
-	 * Is the specified Resource required by this Seize object?
-	 * @param res = the specified Resource.
-	 * @return = TRUE if the Resource is required.
-	 */
+	public ArrayList<Resource> getResourceList() {
+		return resourceList.getValue();
+	}
+
+	@Override
 	public boolean requiresResource(Resource res) {
-		if (resourceList.getValue() == null)
+		if (getResourceList() == null)
 			return false;
-		return resourceList.getValue().contains(res);
+		return getResourceList().contains(res);
 	}
 
 	@Output(name = "SeizedUnits",

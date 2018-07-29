@@ -84,21 +84,24 @@ public class DowntimeEntity extends StateEntity implements StateEntityListener {
 	private double startTime;        // The start time of the latest downtime event
 	private double endTime;          // the end time of the latest downtime event
 
+	private static final String STATE_DOWNTIME = "Downtime";
+
 	{
 		workingStateListInput.setHidden(true);
 
-		firstDowntime = new SampleInput("FirstDowntime", "Key Inputs", null);
+		firstDowntime = new SampleInput("FirstDowntime", KEY_INPUTS, null);
 		firstDowntime.setUnitType(TimeUnit.class);
+		firstDowntime.setEntity(this);
 		this.addInput(firstDowntime);
 
-		iatWorkingEntity = new EntityInput<>(StateEntity.class, "IntervalWorkingEntity", "Key Inputs", null);
+		iatWorkingEntity = new EntityInput<>(StateEntity.class, "IntervalWorkingEntity", KEY_INPUTS, null);
 		this.addInput(iatWorkingEntity);
 		this.addSynonym(iatWorkingEntity, "IATWorkingEntity");
 
-		durationWorkingEntity = new EntityInput<>(StateEntity.class, "DurationWorkingEntity", "Key Inputs", null);
+		durationWorkingEntity = new EntityInput<>(StateEntity.class, "DurationWorkingEntity", KEY_INPUTS, null);
 		this.addInput(durationWorkingEntity);
 
-		downtimeIATDistribution = new SampleInput("Interval", "Key Inputs", null);
+		downtimeIATDistribution = new SampleInput("Interval", KEY_INPUTS, null);
 		downtimeIATDistribution.setUnitType(TimeUnit.class);
 		downtimeIATDistribution.setEntity(this);
 		downtimeIATDistribution.setRequired(true);
@@ -107,7 +110,7 @@ public class DowntimeEntity extends StateEntity implements StateEntityListener {
 		this.addSynonym(downtimeIATDistribution, "IAT");
 		this.addSynonym(downtimeIATDistribution, "TimeBetweenFailures");
 
-		downtimeDurationDistribution = new SampleInput("Duration", "Key Inputs", null);
+		downtimeDurationDistribution = new SampleInput("Duration", KEY_INPUTS, null);
 		downtimeDurationDistribution.setUnitType(TimeUnit.class);
 		downtimeDurationDistribution.setEntity(this);
 		downtimeDurationDistribution.setRequired(true);
@@ -115,7 +118,7 @@ public class DowntimeEntity extends StateEntity implements StateEntityListener {
 		this.addInput(downtimeDurationDistribution);
 		this.addSynonym(downtimeDurationDistribution, "TimeToRepair");
 
-		concurrent = new BooleanInput("Concurrent", "Key Inputs", false);
+		concurrent = new BooleanInput("Concurrent", KEY_INPUTS, false);
 		concurrent.setHidden(true);
 		this.addInput(concurrent);
 	}
@@ -176,7 +179,7 @@ public class DowntimeEntity extends StateEntity implements StateEntityListener {
 	 */
 	@Override
 	public String getInitialState() {
-		return "Working";
+		return STATE_WORKING;
 	}
 
 	/**
@@ -186,7 +189,7 @@ public class DowntimeEntity extends StateEntity implements StateEntityListener {
 	 */
 	@Override
 	public boolean isValidState(String state) {
-		return "Working".equals(state) || "Downtime".equals(state);
+		return STATE_WORKING.equals(state) || STATE_DOWNTIME.equals(state);
 	}
 
 	/**
@@ -197,7 +200,7 @@ public class DowntimeEntity extends StateEntity implements StateEntityListener {
 	 */
 	@Override
 	public boolean isValidWorkingState(String state) {
-		return "Working".equals(state);
+		return STATE_WORKING.equals(state);
 	}
 
 	/**
@@ -392,9 +395,9 @@ public class DowntimeEntity extends StateEntity implements StateEntityListener {
 	private void setDown(boolean b) {
 		down = b;
 		if (down)
-			setPresentState("Downtime");
+			setPresentState(STATE_DOWNTIME);
 		else
-			setPresentState("Working");
+			setPresentState(STATE_WORKING);
 	}
 
 	final void endDowntime() {
@@ -554,7 +557,7 @@ public class DowntimeEntity extends StateEntity implements StateEntityListener {
 		double total = simTime;
 		if (simTime > Simulation.getInitializationTime())
 			total -= Simulation.getInitializationTime();
-		double down = this.getTimeInState(simTime, "Downtime");
+		double down = this.getTimeInState(simTime, STATE_DOWNTIME);
 		return 1.0d - down/total;
 	}
 

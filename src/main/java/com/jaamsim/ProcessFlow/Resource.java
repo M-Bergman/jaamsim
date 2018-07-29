@@ -1,7 +1,7 @@
 /*
  * JaamSim Discrete Event Simulation
  * Copyright (C) 2013 Ausenco Engineering Canada Inc.
- * Copyright (C) 2016 JaamSim Software Inc.
+ * Copyright (C) 2016-2018 JaamSim Software Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,8 +26,9 @@ import com.jaamsim.ProbabilityDistributions.Distribution;
 import com.jaamsim.Samples.SampleConstant;
 import com.jaamsim.Samples.SampleInput;
 import com.jaamsim.Samples.TimeSeries;
+import com.jaamsim.Statistics.TimeBasedFrequency;
+import com.jaamsim.Statistics.TimeBasedStatistics;
 import com.jaamsim.basicsim.Entity;
-import com.jaamsim.datatypes.DoubleVector;
 import com.jaamsim.events.Conditional;
 import com.jaamsim.events.EventManager;
 import com.jaamsim.events.ProcessTarget;
@@ -61,48 +62,45 @@ public class Resource extends DisplayEntity {
 	private final BooleanInput strictOrder;
 
 	private int unitsInUse;  // number of resource units that are being used at present
-	private ArrayList<Seize> seizeList;  // Seize objects that require this resource
+	private ArrayList<ResourceUser> userList;  // objects that seize this resource
 	private int lastCapacity; // capacity for the resource
 
 	//	Statistics
-	protected double timeOfLastUpdate; // time at which the statistics were last updated
-	protected double startOfStatisticsCollection; // time at which statistics collection was started
-	protected int minUnitsInUse; // minimum observed number of units in use
-	protected int maxUnitsInUse; // maximum observed number of units in use
-	protected double unitSeconds;  // total time that units have been used
-	protected double squaredUnitSeconds;  // total time for the square of the number of units in use
+	private final TimeBasedStatistics stats;
+	private final TimeBasedFrequency freq;
 	protected int unitsSeized;    // number of units that have been seized
 	protected int unitsReleased;  // number of units that have been released
-	protected DoubleVector unitsInUseDist;  // entry at position n is the total time that n units have been in use
 
 	{
 		attributeDefinitionList.setHidden(false);
 
-		capacity = new SampleInput("Capacity", "Key Inputs", new SampleConstant(1.0));
+		capacity = new SampleInput("Capacity", KEY_INPUTS, new SampleConstant(1.0));
 		capacity.setUnitType(DimensionlessUnit.class);
 		capacity.setEntity(this);
 		capacity.setValidRange(0, Double.POSITIVE_INFINITY);
 		this.addInput(capacity);
 
-		strictOrder = new BooleanInput("StrictOrder", "Key Inputs", false);
+		strictOrder = new BooleanInput("StrictOrder", KEY_INPUTS, false);
 		this.addInput(strictOrder);
 	}
 
 	public Resource() {
-		unitsInUseDist = new DoubleVector();
-		seizeList = new ArrayList<>();
+		userList = new ArrayList<>();
+		stats = new TimeBasedStatistics();
+		freq = new TimeBasedFrequency(0, 10);
 	}
 
 	@Override
 	public void validate() {
 
 		boolean found = false;
-		for (Seize ent : Entity.getClonesOfIterator(Seize.class)) {
-			if( ent.requiresResource(this) )
+		for (Entity ent : Entity.getClonesOfIterator(Entity.class, ResourceUser.class)) {
+			ResourceUser ru = (ResourceUser) ent;
+			if (ru.requiresResource(this))
 				found = true;
 		}
 		if (!found)
-			throw new InputErrorException( "At least one Seize object must use this resource." );
+			throw new InputErrorException( "At least one object must seize this resource." );
 
 		if( capacity.getValue() instanceof Distribution )
 			throw new InputErrorException( "The Capacity keyword cannot accept a probability distribution.");
@@ -116,21 +114,19 @@ public class Resource extends DisplayEntity {
 		lastCapacity = this.getCapacity(0.0d);
 
 		// Clear statistics
-		startOfStatisticsCollection = 0.0;
-		timeOfLastUpdate = 0.0;
-		minUnitsInUse = 0;
-		maxUnitsInUse = 0;
-		unitSeconds = 0.0;
-		squaredUnitSeconds = 0.0;
+		stats.clear();
+		stats.addValue(0.0d, 0);
+		freq.clear();
+		freq.addValue(0.0d,  0);
 		unitsSeized = 0;
 		unitsReleased = 0;
-		unitsInUseDist.clear();
 
-		// Prepare a list of the Seize objects that use this resource
-		seizeList.clear();
-		for (Seize ent : Entity.getClonesOfIterator(Seize.class)) {
-			if( ent.requiresResource(this) )
-				seizeList.add(ent);
+		// Prepare a list of the objects that seize this resource
+		userList.clear();
+		for (Entity ent : Entity.getClonesOfIterator(Entity.class, ResourceUser.class)) {
+			ResourceUser ru = (ResourceUser) ent;
+			if (ru.requiresResource(this))
+				userList.add(ru);
 		}
 	}
 
@@ -150,9 +146,15 @@ public class Resource extends DisplayEntity {
 	 * @param n = number of units to seize
 	 */
 	public void seize(int n) {
-		this.updateStatistics(unitsInUse, unitsInUse+n);
 		unitsInUse += n;
 		unitsSeized += n;
+		double simTime = this.getSimTime();
+		stats.addValue(simTime, unitsInUse);
+		freq.addValue(simTime, unitsInUse);
+		if (getAvailableUnits(simTime) < 0) {
+			error("Capacity of resource exceeded. Capacity: %s, units in use: %s.",
+					getCapacity(simTime), unitsInUse);
+		}
 	}
 
 	/**
@@ -161,90 +163,87 @@ public class Resource extends DisplayEntity {
 	 */
 	public void release(int m) {
 		int n = Math.min(m, unitsInUse);
-		this.updateStatistics(unitsInUse, unitsInUse-n);
 		unitsInUse -= n;
 		unitsReleased += n;
+		double simTime = this.getSimTime();
+		stats.addValue(simTime, unitsInUse);
+		freq.addValue(simTime, unitsInUse);
 	}
 
 	/**
-	 * Notify all the Seize object that the number of available units of this Resource has increased.
+	 * Starts resource users on their next entities.
 	 */
-	public void notifySeizeObjects() {
+	public static void notifyResourceUsers(ArrayList<Resource> resList) {
 
-		// Is there capacity available?
-		int cap = this.getCapacity(this.getSimTime());
-		if (cap <= unitsInUse)
-			return;
-
-		// Prepare a sorted list of the Seize objects that have a waiting entity
-		ArrayList<Seize> list = new ArrayList<>(seizeList.size());
-		for (Seize s : seizeList) {
-			if (!s.getQueue().isEmpty()) {
-				list.add(s);
+		// Prepare a sorted list of the resource users that have a waiting entity
+		ArrayList<ResourceUser> list = new ArrayList<>();
+		for (Resource res : resList) {
+			for (ResourceUser ru : res.userList) {
+				if (!list.contains(ru) && ru.hasWaitingEntity()) {
+					list.add(ru);
+				}
 			}
 		}
-		Collections.sort(list, seizeCompare);
+		Collections.sort(list, userCompare);
 
-		// Find the Seize object(s) that can use the released units
+		// Attempt to start the resource users in order of priority and wait time
 		while (true) {
 
-			// Find the first Seize object that can seize the Resource
-			Seize selection = null;
-			for (Seize s : list) {
-				if (s.isReadyToStart()) {
-					selection = s;
+			// Find the first resource user that can seize its resources
+			ResourceUser selection = null;
+			for (ResourceUser ru : list) {
+				if (ru.isReadyToStart()) {
+					selection = ru;
 					break;
 				}
 
-				// In StrictOrder mode, only the highest priority/longest waiting time entity is
-				// eligible to seize the Resource
-				if (strictOrder.getValue())
+				// In strict-order mode, only the highest priority/longest wait time entity is
+				// eligible to seize its resources
+				if (ru.hasStrictResource())
 					return;
 			}
 
-			// If none of the Seize objects can seize the Resource, then we are done
+			// If none of the resource users can seize its resources, then we are done
 			if (selection == null)
 				return;
 
-			// Seize the resource
-			selection.startProcessing(getSimTime());
+			// Seize the resources
+			selection.startNextEntity();
 
-			// Is additional capacity available?
-			if (cap <= unitsInUse)
-				return;
-
-			// If the selected Seize object has no more entities, remove it from the list
-			if (selection.getQueue().isEmpty()) {
+			// If the selected object has no more entities, remove it from the list
+			if (!selection.hasWaitingEntity()) {
 				list.remove(selection);
 			}
 			// If it does have more entities, re-sort the list to account for the next entity
 			else {
-				Collections.sort(list, seizeCompare);
+				Collections.sort(list, userCompare);
 			}
 		}
 	}
 
-	/**
-	 * Sorts the Seize objects by the priority and waiting time of the first entity in each queue
-	 */
-	private static class SeizeCompare implements Comparator<Seize> {
-		@Override
-		public int compare(Seize s1, Seize s2) {
+	public boolean isStrictOrder() {
+		return strictOrder.getValue();
+	}
 
-			// Chose the Seize object whose Queue contains the highest priority entity
+	/**
+	 * Sorts the users of the Resource by their priority and waiting time
+	 */
+	private static class UserCompare implements Comparator<ResourceUser> {
+		@Override
+		public int compare(ResourceUser ru1, ResourceUser ru2) {
+
+			// Chose the object with the highest priority entity
 			// (lowest numerical value, i.e. 1 is higher priority than 2)
-			Queue que1 = s1.getQueue();
-			Queue que2 = s2.getQueue();
-			int ret = Integer.compare(que1.getFirstPriority(), que2.getFirstPriority());
+			int ret = Integer.compare(ru1.getPriority(), ru2.getPriority());
 
 			// If the priorities are the same, choose the one with the longest waiting time
 			if (ret == 0) {
-				return Double.compare(que2.getQueueTime(), que1.getQueueTime());
+				return Double.compare(ru2.getWaitTime(), ru1.getWaitTime());
 			}
 			return ret;
 		}
 	}
-	private SeizeCompare seizeCompare = new SeizeCompare();
+	private static UserCompare userCompare = new UserCompare();
 
 	/**
 	 * Returns true if the saved capacity differs from the present capacity
@@ -280,9 +279,11 @@ public class Resource extends DisplayEntity {
 	void updateForCapacityChange() {
 		if (isTraceFlag()) trace(0, "updateForCapacityChange");
 
-		// Select the Seize objects to notify
+		// Select the resource users to notify
 		if (this.getCapacity(getSimTime()) > lastCapacity) {
-			this.notifySeizeObjects();
+			ArrayList<Resource> resList = new ArrayList<>(1);
+			resList.add(this);
+			Resource.notifyResourceUsers(resList);
 		}
 
 		// Wait for the next capacity change
@@ -320,38 +321,12 @@ public class Resource extends DisplayEntity {
 	public void clearStatistics() {
 		super.clearStatistics();
 		double simTime = this.getSimTime();
-		startOfStatisticsCollection = simTime;
-		timeOfLastUpdate = simTime;
-		minUnitsInUse = unitsInUse;
-		maxUnitsInUse = unitsInUse;
-		unitSeconds = 0.0;
-		squaredUnitSeconds = 0.0;
+		stats.clear();
+		stats.addValue(simTime, unitsInUse);
+		freq.clear();
+		freq.addValue(simTime, unitsInUse);
 		unitsSeized = 0;
 		unitsReleased = 0;
-		for (int i=0; i<unitsInUseDist.size(); i++) {
-			unitsInUseDist.set(i, 0.0d);
-		}
-	}
-
-	public void updateStatistics( int oldValue, int newValue) {
-
-		minUnitsInUse = Math.min(newValue, minUnitsInUse);
-		maxUnitsInUse = Math.max(newValue, maxUnitsInUse);
-
-		// Add the necessary number of additional bins to the queue length distribution
-		int n = newValue + 1 - unitsInUseDist.size();
-		for( int i=0; i<n; i++ ) {
-			unitsInUseDist.add(0.0);
-		}
-
-		double simTime = this.getSimTime();
-		double dt = simTime - timeOfLastUpdate;
-		if( dt > 0.0 ) {
-			unitSeconds += dt * oldValue;
-			squaredUnitSeconds += dt * oldValue * oldValue;
-			unitsInUseDist.addAt(dt,oldValue);  // add dt to the entry at index queueSize
-			timeOfLastUpdate = simTime;
-		}
 	}
 
 	// ******************************************************************************************************
@@ -406,12 +381,7 @@ public class Resource extends DisplayEntity {
 	  reportable = true,
 	    sequence = 5)
 	public double getUnitsInUseAverage(double simTime) {
-		double dt = simTime - timeOfLastUpdate;
-		double totalTime = simTime - startOfStatisticsCollection;
-		if( totalTime > 0.0 ) {
-			return (unitSeconds + dt*unitsInUse)/totalTime;
-		}
-		return 0.0;
+		return stats.getMean(simTime);
 	}
 
 	@Output(name = "UnitsInUseStandardDeviation",
@@ -420,13 +390,7 @@ public class Resource extends DisplayEntity {
 	  reportable = true,
 	    sequence = 6)
 	public double getUnitsInUseStandardDeviation(double simTime) {
-		double dt = simTime - timeOfLastUpdate;
-		double mean = this.getUnitsInUseAverage(simTime);
-		double totalTime = simTime - startOfStatisticsCollection;
-		if( totalTime > 0.0 ) {
-			return Math.sqrt( (squaredUnitSeconds + dt*unitsInUse*unitsInUse)/totalTime - mean*mean );
-		}
-		return 0.0;
+		return stats.getStandardDeviation(simTime);
 	}
 
 	@Output(name = "UnitsInUseMinimum",
@@ -435,7 +399,7 @@ public class Resource extends DisplayEntity {
 	  reportable = true,
 	    sequence = 7)
 	public int getUnitsInUseMinimum(double simTime) {
-		return minUnitsInUse;
+		return (int) stats.getMin();
 	}
 
 	@Output(name = "UnitsInUseMaximum",
@@ -444,11 +408,12 @@ public class Resource extends DisplayEntity {
 	  reportable = true,
 	    sequence = 8)
 	public int getUnitsInUseMaximum(double simTime) {
+		int ret = (int) stats.getMax();
 		// A unit that is seized and released immediately
 		// does not count as a non-zero maximum in use
-		if( maxUnitsInUse == 1 && unitsInUseDist.get(1) == 0.0 )
+		if (ret == 1 && freq.getBinTime(simTime, 1) == 0.0d)
 			return 0;
-		return maxUnitsInUse;
+		return ret;
 	}
 
 	@Output(name = "UnitsInUseTimes",
@@ -456,13 +421,8 @@ public class Resource extends DisplayEntity {
 	    unitType = TimeUnit.class,
 	  reportable = true,
 	    sequence = 9)
-	public DoubleVector getUnitsInUseDistribution(double simTime) {
-		DoubleVector ret = new DoubleVector(unitsInUseDist);
-		double dt = simTime - timeOfLastUpdate;
-		if(ret.size() == 0)
-			ret.add(0.0);
-		ret.addAt(dt, unitsInUse);  // adds dt to the entry at index unitsInUse
-		return ret;
+	public double[] getUnitsInUseDistribution(double simTime) {
+		return freq.getBinTimes(simTime);
 	}
 
 }

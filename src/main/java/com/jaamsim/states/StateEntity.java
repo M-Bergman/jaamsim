@@ -1,6 +1,7 @@
 /*
  * JaamSim Discrete Event Simulation
  * Copyright (C) 2014 Ausenco Engineering Canada Inc.
+ * Copyright (C) 2018 JaamSim Software Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,7 +21,9 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.Map.Entry;
 
 import com.jaamsim.Graphics.DisplayEntity;
 import com.jaamsim.basicsim.Entity;
@@ -59,16 +62,19 @@ public class StateEntity extends DisplayEntity {
 
 	protected FileEntity stateReportFile;        // The file to store the state information
 
+	protected static final String STATE_IDLE = "Idle";
+	protected static final String STATE_WORKING = "Working";
+
 	{
-		stateGraphics = new StringKeyInput<>(DisplayEntity.class, "StateGraphics", "Key Inputs");
+		stateGraphics = new StringKeyInput<>(DisplayEntity.class, "StateGraphics", KEY_INPUTS);
 		stateGraphics.setHidden(true);
 		this.addInput(stateGraphics);
 
-		traceState = new BooleanInput("TraceState", "Key Inputs", false);
+		traceState = new BooleanInput("TraceState", KEY_INPUTS, false);
 		traceState.setHidden(true);
 		this.addInput(traceState);
 
-		workingStateListInput = new StringListInput("WorkingStateList", "Maintenance", new ArrayList<String>(0));
+		workingStateListInput = new StringListInput("WorkingStateList", MAINTENANCE, new ArrayList<String>(0));
 		this.addInput(workingStateListInput);
 	}
 
@@ -130,7 +136,7 @@ public class StateEntity extends DisplayEntity {
 	 * @return
 	 */
 	public String getInitialState() {
-		return "Idle";
+		return STATE_IDLE;
 	}
 
 	/**
@@ -139,7 +145,7 @@ public class StateEntity extends DisplayEntity {
 	 * @return
 	 */
 	public boolean isValidState(String state) {
-		return "Idle".equals(state) || "Working".equals(state);
+		return STATE_IDLE.equals(state) || STATE_WORKING.equals(state);
 	}
 
 	/**
@@ -153,7 +159,7 @@ public class StateEntity extends DisplayEntity {
 		if( workingStateListInput.getValue().size() > 0 )
 			return workingStateListInput.getValue().contains( state );
 
-		return "Working".equals(state);
+		return STATE_WORKING.equals(state);
 	}
 
 	/**
@@ -421,6 +427,26 @@ public class StateEntity extends DisplayEntity {
 		return EventManager.ticksToSecs(ticks);
 	}
 
+	/**
+	 * Returns the total elapsed time in seconds after the completion of the initialisation period
+	 * the entity has been in any state that ends in the specified string.
+	 * @param simTime - present simulation time
+	 * @param state - string representing the specified type of state
+	 * @return total time
+	 */
+	public double getTotalTimeInState(double simTime, String state) {
+		long simTicks = EventManager.secsToNearestTick(simTime);
+		long ticks = 0L;
+		Iterator<Entry<String, StateRecord>> itr = states.entrySet().iterator();
+		while (itr.hasNext()) {
+			Entry<String, StateRecord> pair = itr.next();
+			if (pair.getKey().endsWith(state)) {
+				ticks += getTicksInState(simTicks, pair.getValue());
+			}
+		}
+		return EventManager.ticksToSecs(ticks);
+	}
+
 	@Output(name = "State",
 	 description = "The present state for the object.",
 	    unitType = DimensionlessUnit.class,
@@ -472,6 +498,21 @@ public class StateEntity extends DisplayEntity {
 			ret.put(stateRec.name, t);
 		}
 		return ret;
+	}
+
+	@Output(name = "TotalTime",
+	 description = "The total time the entity has spent in the model after the completion of "
+	             + "the initialisation period. It is equal to the sum of the state times.",
+	    unitType = TimeUnit.class,
+	  reportable = true,
+	    sequence = 4)
+	public double getTotalTime(double simTime) {
+		long simTicks = EventManager.secsToNearestTick(simTime);
+		long ticks = 0L;
+		for (StateRecord stateRec : states.values()) {
+			ticks += getTicksInState(simTicks, stateRec);
+		}
+		return EventManager.ticksToSecs(ticks);
 	}
 
 }

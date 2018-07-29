@@ -1,7 +1,7 @@
 /*
  * JaamSim Discrete Event Simulation
  * Copyright (C) 2013 Ausenco Engineering Canada Inc.
- * Copyright (C) 2016 JaamSim Software Inc.
+ * Copyright (C) 2016-2018 JaamSim Software Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,6 +32,7 @@ import com.jaamsim.input.InputAgent;
 import com.jaamsim.input.Keyword;
 import com.jaamsim.input.KeywordIndex;
 import com.jaamsim.input.Output;
+import com.jaamsim.input.StringInput;
 import com.jaamsim.units.DimensionlessUnit;
 import com.jaamsim.units.TimeUnit;
 
@@ -57,6 +58,11 @@ public class EntityGenerator extends LinkedService {
 	         exampleList = {"Proto", "'choose( this.NumberGenerated%2+1, [Proto1], [Proto2])'"})
 	private final EntityProvInput<DisplayEntity> prototypeEntity;
 
+	@Keyword(description = "The base for the names assigned to the generated entities. "
+	                     + "The generated entities will be named Name1, Name2, etc.",
+	         exampleList = {"Customer", "Package"})
+	private final StringInput baseName;
+
 	@Keyword(description = "The maximum number of entities to be generated.",
 	         exampleList = {"3", "InputValue1", "[InputValue1].Value"})
 	private final SampleInput maxNumber;
@@ -73,32 +79,36 @@ public class EntityGenerator extends LinkedService {
 		opportunisticMaintenanceList.setHidden(true);
 		opportunisticBreakdownList.setHidden(true);
 
-		firstArrivalTime = new SampleInput("FirstArrivalTime", "Key Inputs", new SampleConstant(TimeUnit.class, 0.0));
+		firstArrivalTime = new SampleInput("FirstArrivalTime", KEY_INPUTS, new SampleConstant(TimeUnit.class, 0.0));
 		firstArrivalTime.setUnitType(TimeUnit.class);
 		firstArrivalTime.setEntity(this);
 		firstArrivalTime.setValidRange(0, Double.POSITIVE_INFINITY);
 		this.addInput(firstArrivalTime);
 
-		interArrivalTime = new SampleInput("InterArrivalTime", "Key Inputs", new SampleConstant(TimeUnit.class, 1.0));
+		interArrivalTime = new SampleInput("InterArrivalTime", KEY_INPUTS, new SampleConstant(TimeUnit.class, 1.0));
 		interArrivalTime.setUnitType(TimeUnit.class);
 		interArrivalTime.setEntity(this);
 		interArrivalTime.setValidRange(0, Double.POSITIVE_INFINITY);
 		this.addInput(interArrivalTime);
 
-		entitiesPerArrival = new SampleInput("EntitiesPerArrival", "Key Inputs", new SampleConstant(DimensionlessUnit.class, 1.0));
+		entitiesPerArrival = new SampleInput("EntitiesPerArrival", KEY_INPUTS, new SampleConstant(DimensionlessUnit.class, 1.0));
 		entitiesPerArrival.setUnitType(DimensionlessUnit.class);
 		entitiesPerArrival.setEntity(this);
 		entitiesPerArrival.setValidRange(1, Double.POSITIVE_INFINITY);
 		this.addInput(entitiesPerArrival);
 
-		prototypeEntity = new EntityProvInput<>(DisplayEntity.class, "PrototypeEntity", "Key Inputs", null);
+		prototypeEntity = new EntityProvInput<>(DisplayEntity.class, "PrototypeEntity", KEY_INPUTS, null);
 		prototypeEntity.setEntity(this);
 		prototypeEntity.setRequired(true);
 		prototypeEntity.addInvalidClass(TextBasics.class);
 		prototypeEntity.addInvalidClass(OverlayEntity.class);
 		this.addInput(prototypeEntity);
 
-		maxNumber = new SampleInput("MaxNumber", "Key Inputs", null);
+		baseName = new StringInput("BaseName", KEY_INPUTS, null);
+		baseName.setDefaultText("Generator Name");
+		this.addInput(baseName);
+
+		maxNumber = new SampleInput("MaxNumber", KEY_INPUTS, null);
 		maxNumber.setUnitType(DimensionlessUnit.class);
 		maxNumber.setEntity(this);
 		maxNumber.setValidRange(1, Double.POSITIVE_INFINITY);
@@ -125,7 +135,7 @@ public class EntityGenerator extends LinkedService {
 		super.startUp();
 
 		// Start generating entities
-		this.startStep();
+		this.restart();
 	}
 
 	@Override
@@ -142,6 +152,9 @@ public class EntityGenerator extends LinkedService {
 		else
 			presentIAT = interArrivalTime.getValue().getNextSample(simTime);
 
+		if (presentIAT == Double.POSITIVE_INFINITY)
+			return false;
+
 		return true;
 	}
 
@@ -153,17 +166,21 @@ public class EntityGenerator extends LinkedService {
 			return true;
 		}
 
+		// Set the name for the entities
+		String name = baseName.getValue();
+		if (name == null)
+			name = this.getName() + "_";
+
 		// Create the new entities
 		int num = (int) entitiesPerArrival.getValue().getNextSample(getSimTime());
 		for (int i=0; i<num; i++) {
 			numberGenerated++;
 			DisplayEntity proto = prototypeEntity.getValue().getNextEntity(simTime);
 			StringBuilder sb = new StringBuilder();
-			sb.append(this.getName()).append("_").append(numberGenerated);
+			sb.append(name).append(numberGenerated);
 			DisplayEntity ent = InputAgent.generateEntityWithName(proto.getClass(), sb.toString());
 			Entity.fastCopyInputs(proto, ent);
 			ent.earlyInit();
-
 
 			// Set the obj output to the assembled part
 			this.registerEntity(ent);
@@ -189,6 +206,8 @@ public class EntityGenerator extends LinkedService {
 	@Override
 	public ArrayList<Entity> getSourceEntities() {
 		ArrayList<Entity> ret = new ArrayList<>();
+		if (prototypeEntity.getValue() == null)
+			return ret;
 		DisplayEntity ent = prototypeEntity.getValue().getNextEntity(0.0d);
 		if (ent != null) {
 			ret.add(ent);

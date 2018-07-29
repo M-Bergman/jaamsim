@@ -1,7 +1,7 @@
 /*
  * JaamSim Discrete Event Simulation
  * Copyright (C) 2014 Ausenco Engineering Canada Inc.
- * Copyright (C) 2016 JaamSim Software Inc.
+ * Copyright (C) 2016-2018 JaamSim Software Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,8 +21,10 @@ import java.util.ArrayList;
 
 import com.jaamsim.basicsim.Entity;
 import com.jaamsim.input.ExpParser.Expression;
+import com.jaamsim.units.Unit;
 
 public class ExpressionInput extends Input<ExpParser.Expression> {
+	private Class<? extends Unit> unitType;
 	private Entity thisEnt;
 	private ExpEvaluator.EntityParseContext parseContext;
 
@@ -30,8 +32,33 @@ public class ExpressionInput extends Input<ExpParser.Expression> {
 		super(key, cat, def);
 	}
 
+	public void setUnitType(Class<? extends Unit> u) {
+		if (u == unitType) {
+			return;
+		}
+		unitType = u;
+		this.setValid(false);
+	}
+
+	public Class<? extends Unit> getUnitType() {
+		return unitType;
+	}
+
 	public void setEntity(Entity ent) {
 		thisEnt = ent;
+	}
+
+	@Override
+	public void copyFrom(Input<?> in) {
+		super.copyFrom(in);
+
+		// An expression input must be re-parsed to reset the entity referred to by "this"
+		parseFrom(in);
+	}
+
+	@Override
+	public String applyConditioning(String str) {
+		return Parser.addQuotesIfNeeded(str);
 	}
 
 	@Override
@@ -43,10 +70,12 @@ public class ExpressionInput extends Input<ExpParser.Expression> {
 
 			ExpEvaluator.EntityParseContext pc = ExpEvaluator.getParseContext(thisEnt, expString);
 			Expression exp = ExpParser.parseExpression(pc, expString);
+			ExpParser.assertUnitType(exp, unitType);
 
 			// Save the expression
 			parseContext = pc;
 			value = exp;
+			this.setValid(true);
 
 		} catch (ExpError e) {
 			throw new InputErrorException(e);
@@ -62,6 +91,11 @@ public class ExpressionInput extends Input<ExpParser.Expression> {
 	public void getValueTokens(ArrayList<String> toks) {
 		if (value == null) return;
 		toks.add(parseContext.getUpdatedSource());
+	}
+
+	@Override
+	public boolean useExpressionBuilder() {
+		return true;
 	}
 
 }

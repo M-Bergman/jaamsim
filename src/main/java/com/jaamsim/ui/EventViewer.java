@@ -23,6 +23,8 @@ import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
 import java.util.ArrayList;
 
 import javax.swing.JButton;
@@ -36,6 +38,7 @@ import javax.swing.table.DefaultTableModel;
 import javax.swing.table.TableCellRenderer;
 import javax.swing.table.TableModel;
 
+import com.jaamsim.basicsim.Simulation;
 import com.jaamsim.events.EventManager;
 import com.jaamsim.events.EventTraceListener;
 import com.jaamsim.events.ProcessTarget;
@@ -171,8 +174,21 @@ public class EventViewer extends FrameBox implements EventTraceListener {
 
 		// Size and position of the viewer
 		pack();
-		setLocation(GUIFrame.COL4_START, GUIFrame.BOTTOM_START);
-		setSize(GUIFrame.COL4_WIDTH, GUIFrame.HALF_BOTTOM);
+		setLocation(Simulation.getEventViewerPos().get(0), Simulation.getEventViewerPos().get(1));
+		setSize(Simulation.getEventViewerSize().get(0), Simulation.getEventViewerSize().get(1));
+
+		addComponentListener(new ComponentAdapter() {
+
+			@Override
+			public void componentMoved(ComponentEvent e) {
+				Simulation.setEventViewerPos(getLocation().x, getLocation().y);
+			}
+
+			@Override
+			public void componentResized(ComponentEvent e) {
+				Simulation.setEventViewerSize(getSize().width, getSize().height);
+			}
+		});
 
 		// Display the viewer
 		setVisible(true);
@@ -255,11 +271,9 @@ public class EventViewer extends FrameBox implements EventTraceListener {
 	}
 
 	private void setDirty(boolean bool) {
-		if (bool != dirty) {
-			dirty = bool;
-			if (bool) {
-				GUIFrame.updateUI();
-			}
+		dirty = bool;
+		if (bool) {
+			GUIFrame.updateUI();
 		}
 	}
 

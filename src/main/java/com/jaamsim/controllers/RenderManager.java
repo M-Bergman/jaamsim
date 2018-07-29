@@ -568,11 +568,12 @@ public class RenderManager implements DragSourceListener {
 			menu.setLightWeightPopupEnabled(false);
 			final int menuX = mouseInfo.x + awtFrame.getInsets().left;
 			final int menuY = mouseInfo.y + awtFrame.getInsets().top;
+			final int nodeIndex = getNodeIndex(windowID, mouseInfo.x, mouseInfo.y);
 
 			if (ents.size() == 0) { return; } // Nothing to show
 
 			if (ents.size() == 1) {
-				ContextMenu.populateMenu(menu, ents.get(0), menuX, menuY);
+				ContextMenu.populateMenu(menu, ents.get(0), nodeIndex, awtFrame, menuX, menuY);
 			}
 			else {
 				// Several entities, let the user pick the interesting entity first
@@ -584,7 +585,7 @@ public class RenderManager implements DragSourceListener {
 						@Override
 						public void actionPerformed( ActionEvent event ) {
 							menu.removeAll();
-							ContextMenu.populateMenu(menu, de, menuX, menuY);
+							ContextMenu.populateMenu(menu, de, nodeIndex, awtFrame, menuX, menuY);
 							menu.show(awtFrame, menuX, menuY);
 						}
 					} );
@@ -620,8 +621,8 @@ public class RenderManager implements DragSourceListener {
 			}
 		}
 
-		// If no entity is found, set the selected entity to the view window
-		FrameBox.setSelectedEntity(windowToViewMap.get(windowID), false);
+		// If no entity is found, set the selected entity to null
+		FrameBox.setSelectedEntity(null, false);
 		GUIFrame.updateUI();
 	}
 
@@ -1260,13 +1261,7 @@ public class RenderManager implements DragSourceListener {
 		if (points == null || points.isEmpty())
 			return;
 
-		Transform trans = null;
-		if (selectedEntity.getCurrentRegion() != null || selectedEntity.getRelativeEntity() != null)
-			trans = selectedEntity.getGlobalPositionTransform();
-
-		ArrayList<Vec3d> globalPoints = new ArrayList<>(points);
-		if (trans != null)
-			globalPoints = (ArrayList<Vec3d>) RenderUtils.transformPointsWithTrans(trans.getMat4dRef(), globalPoints);
+		ArrayList<Vec3d> globalPoints = selectedEntity.getGlobalPosition(points);
 
 		int splitInd = 0;
 		Vec4d nearPoint = null;
@@ -1289,68 +1284,47 @@ public class RenderManager implements DragSourceListener {
 			return;
 		}
 
-		if (trans != null) {
-			Transform invTrans = new Transform();
-			trans.inverse(invTrans);
-			invTrans.multAndTrans(nearPoint, nearPoint);
-		}
+		// Insert the new node
+		points.add(splitInd + 1, selectedEntity.getLocalPosition(nearPoint));
 
-		// If we are here, we have a segment to split, at index i
-		ArrayList<Vec3d> splitPoints = new ArrayList<>();
-		for(int i = 0; i <= splitInd; ++i) {
-			splitPoints.add(points.get(i));
-		}
-		splitPoints.add(nearPoint);
-		for (int i = splitInd+1; i < points.size(); ++i) {
-			splitPoints.add(points.get(i));
-		}
-
-		KeywordIndex ptsKw = InputAgent.formatPointsInputs("Points", splitPoints, new Vec3d());
+		KeywordIndex ptsKw = InputAgent.formatPointsInputs("Points", points, new Vec3d());
 		InputAgent.storeAndExecute(new KeywordCommand(selectedEntity, splitInd + 1, ptsKw));
 	}
 
 	private void removeLineNode(int windowID, int x, int y) {
-		Ray currentRay = getRayForMouse(windowID, x, y);
-
-		Mat4d rayMatrix = MathUtils.RaySpace(currentRay);
-
 		ArrayList<Vec3d> points = selectedEntity.getPoints();
 		if (points == null || points.size() <= 2)
 			return;
 
-		ArrayList<Vec3d> globalPoints = new ArrayList<>(points);
+		int removeInd = getNodeIndex(windowID, x, y);
+		if (removeInd == -1)
+			return;
 
-		Transform trans = null;
-		if (selectedEntity.getCurrentRegion() != null || selectedEntity.getRelativeEntity() != null) {
-			trans = selectedEntity.getGlobalPositionTransform();
-			globalPoints = (ArrayList<Vec3d>) RenderUtils.transformPointsWithTrans(trans.getMat4dRef(), globalPoints);
-		}
+		// Remove the selected node
+		points.remove(removeInd);
 
-		int removeInd = 0;
-		// Find a line segment we are near
-		for ( ;removeInd < points.size(); ++removeInd) {
-			Vec4d p = new Vec4d(globalPoints.get(removeInd).x, globalPoints.get(removeInd).y, globalPoints.get(removeInd).z, 1.0d);
-
-			double rayAngle = RenderUtils.angleToRay(rayMatrix, p);
-
-			if (rayAngle > 0 && rayAngle < 0.01309) { // 0.75 degrees in radians
-				break;
-			}
-
-			if (removeInd == points.size()) {
-				// No appropriate point was found
-				return;
-			}
-		}
-
-		ArrayList<Vec3d> splitPoints = new ArrayList<>();
-		for(int i = 0; i < points.size(); ++i) {
-			if (i == removeInd) continue;
-			splitPoints.add(points.get(i));
-		}
-
-		KeywordIndex ptsKw = InputAgent.formatPointsInputs("Points", splitPoints, new Vec3d());
+		KeywordIndex ptsKw = InputAgent.formatPointsInputs("Points", points, new Vec3d());
 		InputAgent.storeAndExecute(new KeywordCommand(selectedEntity, removeInd, ptsKw));
+	}
+
+	public int getNodeIndex(int windowID, int x, int y) {
+
+		ArrayList<Vec3d> points = selectedEntity.getPoints();
+		if (points == null)
+			return -1;
+
+		Ray currentRay = getRayForMouse(windowID, x, y);
+		Mat4d rayMatrix = MathUtils.RaySpace(currentRay);
+
+		ArrayList<Vec3d> globalPoints = selectedEntity.getGlobalPosition(points);
+		for (int i = 0; i < points.size(); i++) {
+			Vec4d p = new Vec4d(globalPoints.get(i).x, globalPoints.get(i).y, globalPoints.get(i).z, 1.0d);
+			double rayAngle = RenderUtils.angleToRay(rayMatrix, p);
+			if (rayAngle > 0 && rayAngle < 0.01309) { // 0.75 degrees in radians
+				return i;
+			}
+		}
+		return -1;
 	}
 
 	private boolean isMouseHandleID(long id) {

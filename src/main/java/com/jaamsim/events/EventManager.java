@@ -750,24 +750,6 @@ public final class EventManager {
 			throw new ThreadKilledException("Thread killed");
 	}
 
-	public static final double calcSimTime(double secs) {
-		EventManager evt = Process.current().evt();
-		long ticks = evt.secondsToNearestTick(secs) + evt.currentTick;
-		if (ticks < 0)
-			ticks = Long.MAX_VALUE;
-
-		return evt.ticksToSeconds(ticks);
-	}
-
-	public static final long calcSimTicks(double secs) {
-		EventManager evt = Process.current().evt();
-		long ticks = evt.secondsToNearestTick(secs) + evt.currentTick;
-		if (ticks < 0)
-			ticks = Long.MAX_VALUE;
-
-		return ticks;
-	}
-
 	public void scheduleProcessExternal(long waitLength, int eventPriority, boolean fifo, ProcessTarget t, EventHandle handle) {
 		synchronized (lockObject) {
 			long schedTick = calculateEventTime(waitLength);
@@ -944,7 +926,7 @@ public final class EventManager {
 	 * should be exposed.
 	 */
 	private static double globalsecsPerTick = 1e-6d;
-	private static double globalticksPerSecond = Math.round(globalsecsPerTick) / 1e9d;
+	private static double globalticksPerSecond = Math.round(1e9d / globalsecsPerTick) / 1e9d;
 
 	/**
 	 * Convert the number of seconds rounded to the nearest tick. The same as EventManager.secondsToNearestTick()

@@ -1,7 +1,7 @@
 /*
  * JaamSim Discrete Event Simulation
  * Copyright (C) 2002-2011 Ausenco Engineering Canada Inc.
- * Copyright (C) 2016 JaamSim Software Inc.
+ * Copyright (C) 2016-2018 JaamSim Software Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,7 +22,8 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map.Entry;
 
-import com.jaamsim.Samples.SampleInput;
+import com.jaamsim.Commands.DeleteCommand;
+import com.jaamsim.Commands.KeywordCommand;
 import com.jaamsim.datatypes.DoubleVector;
 import com.jaamsim.events.Conditional;
 import com.jaamsim.events.EventHandle;
@@ -32,6 +33,7 @@ import com.jaamsim.input.AttributeDefinitionListInput;
 import com.jaamsim.input.AttributeHandle;
 import com.jaamsim.input.BooleanInput;
 import com.jaamsim.input.ExpError;
+import com.jaamsim.input.ExpParser.Expression;
 import com.jaamsim.input.ExpResType;
 import com.jaamsim.input.ExpResult;
 import com.jaamsim.input.ExpressionHandle;
@@ -79,6 +81,15 @@ public class Entity {
 	private final HashMap<String, AttributeHandle> attributeMap = new LinkedHashMap<>();
 	private final HashMap<String, ExpressionHandle> customOutputMap = new LinkedHashMap<>();
 
+	public static final String KEY_INPUTS = "Key Inputs";
+	public static final String GRAPHICS = "Graphics";
+	public static final String THRESHOLDS = "Thresholds";
+	public static final String MAINTENANCE = "Maintenance";
+	public static final String TRACING = "Tracing";
+	public static final String FONT = "Font";
+	public static final String GUI = "GUI";
+	public static final String MULTIPLE_RUNS = "Multiple Runs";
+
 	@Keyword(description = "Provides the programmer with a detailed trace of the logic executed "
 	                     + "by the entity. Trace information is sent to standard out.",
 	         exampleList = {"TRUE"})
@@ -101,29 +112,27 @@ public class Entity {
 	                     + "A custom output can return a number with or without units, "
 	                     + "an entity, a string, an array, a map, or a lambda function. "
 	                     + "The present value of a custom output is calculated on demand by the "
-	                     + "model. "
-	                     + "A custom output cannot use the value of another custom output in its "
-	                     + "definition.",
+	                     + "model.",
 	         exampleList = {"{ TwiceSimTime '2*this.SimTime' TimeUnit }  { SimTimeInDays 'this.SimTime/1[d]' }",
 	                        "{ FirstEnt 'size([Queue1].QueueList)>0 ? [Queue1].QueueList(1) : [SimEntity1]' }"})
 	public final NamedExpressionListInput namedExpressionInput;
 
 	{
-		trace = new BooleanInput("Trace", "Key Inputs", false);
+		trace = new BooleanInput("Trace", KEY_INPUTS, false);
 		trace.setHidden(true);
 		this.addInput(trace);
 
-		desc = new StringInput("Description", "Key Inputs", "");
+		desc = new StringInput("Description", KEY_INPUTS, "");
 		desc.setHidden(true);
 		this.addInput(desc);
 
 		attributeDefinitionList = new AttributeDefinitionListInput(this, "AttributeDefinitionList",
-				"Key Inputs", new ArrayList<AttributeHandle>());
+				KEY_INPUTS, new ArrayList<AttributeHandle>());
 		attributeDefinitionList.setHidden(false);
 		this.addInput(attributeDefinitionList);
 
 		namedExpressionInput = new NamedExpressionListInput(this, "CustomOutputList",
-				"Key Inputs", new ArrayList<NamedExpression>());
+				KEY_INPUTS, new ArrayList<NamedExpression>());
 		namedExpressionInput.setHidden(false);
 		this.addInput(namedExpressionInput);
 
@@ -242,6 +251,51 @@ public class Entity {
 	}
 
 	/**
+	 * Executes the delete action from the user interface.
+	 */
+	public void delete() {
+
+		// Generated entities are not part of the model inputs so do not support undo/redo
+		if (testFlag(Entity.FLAG_GENERATED)) {
+			kill();
+			return;
+		}
+
+		// Delete any references to this entity in the inputs to other entities
+		for (Entity ent : Entity.getClonesOfIterator(Entity.class)) {
+			if (ent == this)
+				continue;
+			ArrayList<KeywordIndex> oldKwList = new ArrayList<>();
+			ArrayList<KeywordIndex> newKwList = new ArrayList<>();
+			for (Input<?> in : ent.inpList) {
+				ArrayList<String> oldTokens = in.getValueTokens();
+				boolean changed = in.removeReferences(this);
+				if (!changed)
+					continue;
+				KeywordIndex oldKw = new KeywordIndex(in.getKeyword(), oldTokens, null);
+				KeywordIndex newKw = new KeywordIndex(in.getKeyword(), in.getValueTokens(), null);
+				oldKwList.add(oldKw);
+				newKwList.add(newKw);
+			}
+
+			// Reload any inputs that have changed so that redo/undo works correctly
+			if (newKwList.isEmpty())
+				continue;
+			KeywordIndex[] oldKws = new KeywordIndex[oldKwList.size()];
+			KeywordIndex[] newKws = new KeywordIndex[newKwList.size()];
+			oldKws = oldKwList.toArray(oldKws);
+			newKws = newKwList.toArray(newKws);
+			InputAgent.storeAndExecute(new KeywordCommand(ent, 0, oldKws, newKws));
+		}
+
+		// Execute the delete command
+		InputAgent.storeAndExecute(new DeleteCommand(this));
+
+		// Record that the model has changed
+		InputAgent.setSessionEdited(true);
+	}
+
+	/**
 	 * Performs any actions that are required at the end of the simulation run, e.g. to create an output report.
 	 */
 	public void doEnd() {}
@@ -268,6 +322,10 @@ public class Entity {
 
 	protected void addInput(Input<?> in) {
 		inpList.add(in);
+	}
+
+	protected void removeInput(Input<?> in) {
+		inpList.remove(in);
 	}
 
 	protected void addSynonym(Input<?> in, String synonym) {
@@ -307,13 +365,10 @@ public class Entity {
 	}
 
 	/**
-	 * Creates an exact copy of the specified entity.
-	 * <p>
-	 * All the entity's inputs are copied to the new entity, but its internal
-	 * properties are left uninitialised.
-	 * @param ent - entity to be copied.
-	 * @param name - name of the copied entity.
-	 * @return - copied entity.
+	 * Copies the input values from one entity to another. This method is significantly faster
+	 * than copying and re-parsing the input data.
+	 * @param ent - entity whose inputs are to be copied.
+	 * @param target - entity whose inputs are to be assigned.
 	 */
 	public static void fastCopyInputs(Entity ent, Entity target) {
 		// Loop through the original entity's inputs
@@ -327,11 +382,6 @@ public class Entity {
 
 			// Get the matching input for the new entity
 			Input<?> targetInput = target.getEditableInputs().get(i);
-
-			// SampleInputs need to know their entity for "this" to work correctly
-			if (sourceInput instanceof SampleInput) {
-				((SampleInput)targetInput).setEntity(target);
-			}
 
 			// Assign the value to the copied entity's input
 			targetInput.copyFrom(sourceInput);
@@ -428,9 +478,7 @@ public class Entity {
 		if (in == namedExpressionInput) {
 			customOutputMap.clear();
 			for (NamedExpression ne : namedExpressionInput.getValue()) {
-				ExpressionHandle eh = new ExpressionHandle(this, ne.getExpression(), ne.getName());
-				eh.setUnitType(ne.getUnitType());
-				customOutputMap.put(ne.getName(), eh);
+				addCustomOutput(ne.getName(), ne.getExpression(), ne.getUnitType());
 			}
 
 			// Update the OutputBox
@@ -638,6 +686,16 @@ public class Entity {
 		return false;
 	}
 
+	public void addCustomOutput(String name, Expression exp, Class<? extends Unit> unitType) {
+		ExpressionHandle eh = new ExpressionHandle(this, exp, name);
+		eh.setUnitType(unitType);
+		customOutputMap.put(name, eh);
+	}
+
+	public void removeCustomOutput(String name) {
+		customOutputMap.remove(name);
+	}
+
 	private static final String OUTPUT_FORMAT = "%s\t%s\t%s\t%s%n";
 	private static final String LIST_OUTPUT_FORMAT = "%s\t%s[%s]\t%s\t%s%n";
 
@@ -673,6 +731,15 @@ public class Entity {
 				catch (Exception e) {
 					file.format(OUTPUT_FORMAT,
 							this.getName(), out.getName(), Double.NaN, unitString);
+				}
+			}
+
+			// double[] output
+			else if (out.getReturnType() == double[].class) {
+				double[] vec = out.getValue(simTime, double[].class);
+				for (int i = 0; i < vec.length; i++) {
+					file.format(LIST_OUTPUT_FORMAT,
+							this.getName(), out.getName(), i, vec[i]/factor, unitString);
 				}
 			}
 

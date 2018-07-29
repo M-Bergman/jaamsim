@@ -17,6 +17,8 @@
 package com.jaamsim.ui;
 
 import java.awt.Point;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
 import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 
@@ -26,6 +28,7 @@ import javax.swing.table.AbstractTableModel;
 import javax.swing.table.TableModel;
 
 import com.jaamsim.basicsim.Entity;
+import com.jaamsim.basicsim.Simulation;
 import com.jaamsim.input.Input;
 import com.jaamsim.input.InputAgent;
 import com.jaamsim.input.OutputHandle;
@@ -50,8 +53,21 @@ public class OutputBox extends FrameBox {
 
 		getContentPane().add( scrollPane );
 
-		setLocation(GUIFrame.COL3_START, GUIFrame.LOWER_START);
-		setSize(GUIFrame.COL3_WIDTH, GUIFrame.LOWER_HEIGHT);
+		setLocation(Simulation.getOutputViewerPos().get(0), Simulation.getOutputViewerPos().get(1));
+		setSize(Simulation.getOutputViewerSize().get(0), Simulation.getOutputViewerSize().get(1));
+
+		addComponentListener(new ComponentAdapter() {
+
+			@Override
+			public void componentMoved(ComponentEvent e) {
+				Simulation.setOutputViewerPos(getLocation().x, getLocation().y);
+			}
+
+			@Override
+			public void componentResized(ComponentEvent e) {
+				Simulation.setOutputViewerSize(getSize().width, getSize().height);
+			}
+		});
 	}
 
 	/**

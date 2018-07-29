@@ -21,6 +21,8 @@ import java.util.ArrayList;
 
 import com.jaamsim.Commands.KeywordCommand;
 import com.jaamsim.Graphics.DisplayEntity;
+import com.jaamsim.Graphics.OverlayEntity;
+import com.jaamsim.Graphics.TextBasics;
 import com.jaamsim.Samples.SampleConstant;
 import com.jaamsim.Samples.SampleInput;
 import com.jaamsim.basicsim.Entity;
@@ -67,26 +69,28 @@ public class Assemble extends LinkedService {
 		waitQueue.setHidden(true);
 		match.setHidden(true);
 
-		serviceTime = new SampleInput("ServiceTime", "Key Inputs", new SampleConstant(TimeUnit.class, 0.0));
+		serviceTime = new SampleInput("ServiceTime", KEY_INPUTS, new SampleConstant(TimeUnit.class, 0.0));
 		serviceTime.setUnitType(TimeUnit.class);
 		serviceTime.setEntity(this);
 		serviceTime.setValidRange(0, Double.POSITIVE_INFINITY);
 		this.addInput(serviceTime);
 
-		waitQueueList = new EntityListInput<>(Queue.class, "WaitQueueList", "Key Inputs", null);
+		waitQueueList = new EntityListInput<>(Queue.class, "WaitQueueList", KEY_INPUTS, null);
 		waitQueueList.setRequired(true);
 		this.addInput(waitQueueList);
 
 		IntegerVector def = new IntegerVector();
 		def.add(1);
-		numberRequired = new IntegerListInput("NumberRequired", "Key Inputs", def);
+		numberRequired = new IntegerListInput("NumberRequired", KEY_INPUTS, def);
 		this.addInput(numberRequired);
 
-		matchRequired = new BooleanInput("MatchRequired", "Key Inputs", false);
+		matchRequired = new BooleanInput("MatchRequired", KEY_INPUTS, false);
 		this.addInput(matchRequired);
 
-		prototypeEntity = new EntityInput<>(DisplayEntity.class, "PrototypeEntity", "Key Inputs", null);
+		prototypeEntity = new EntityInput<>(DisplayEntity.class, "PrototypeEntity", KEY_INPUTS, null);
 		prototypeEntity.setRequired(true);
+		prototypeEntity.addInvalidClass(TextBasics.class);
+		prototypeEntity.addInvalidClass(OverlayEntity.class);
 		this.addInput(prototypeEntity);
 	}
 
@@ -171,9 +175,6 @@ public class Assemble extends LinkedService {
 		// Set the state for the assembled part
 		if (!stateAssignment.getValue().isEmpty() && assembledEntity instanceof StateEntity)
 			((StateEntity)assembledEntity).setPresentState(stateAssignment.getValue());
-
-		// Position the assembled part relative to the Assemble object
-		this.moveToProcessPosition(assembledEntity);
 		return true;
 	}
 
@@ -190,6 +191,13 @@ public class Assemble extends LinkedService {
 	@Override
 	protected double getStepDuration(double simTime) {
 		return serviceTime.getValue().getNextSample(simTime);
+	}
+
+	@Override
+	public void updateGraphics(double simTime) {
+		if (assembledEntity == null)
+			return;
+		moveToProcessPosition(assembledEntity);
 	}
 
 }

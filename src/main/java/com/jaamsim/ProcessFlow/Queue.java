@@ -1,7 +1,7 @@
 /*
  * JaamSim Discrete Event Simulation
  * Copyright (C) 2003-2011 Ausenco Engineering Canada Inc.
- * Copyright (C) 2016-2017 JaamSim Software Inc.
+ * Copyright (C) 2016-2018 JaamSim Software Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,18 +18,21 @@
 package com.jaamsim.ProcessFlow;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.Map.Entry;
 import java.util.TreeSet;
 
 import com.jaamsim.Graphics.DisplayEntity;
 import com.jaamsim.Samples.SampleConstant;
 import com.jaamsim.Samples.SampleInput;
+import com.jaamsim.Statistics.TimeBasedFrequency;
+import com.jaamsim.Statistics.TimeBasedStatistics;
 import com.jaamsim.StringProviders.StringProvInput;
 import com.jaamsim.basicsim.Entity;
 import com.jaamsim.basicsim.EntityTarget;
-import com.jaamsim.datatypes.DoubleVector;
 import com.jaamsim.datatypes.IntegerVector;
 import com.jaamsim.events.EventHandle;
 import com.jaamsim.events.EventManager;
@@ -107,63 +110,59 @@ public class Queue extends LinkedComponent {
 	private final ArrayList<QueueUser> userList;  // other objects that use this queue
 
 	//	Statistics
-	protected double timeOfLastUpdate; // time at which the statistics were last updated
-	protected double startOfStatisticsCollection; // time at which statistics collection was started
-	protected int minElements; // minimum observed number of entities in the queue
-	protected int maxElements; // maximum observed number of entities in the queue
-	protected double elementSeconds;  // total time that entities have spent in the queue
-	protected double squaredElementSeconds;  // total time for the square of the number of elements in the queue
-	protected DoubleVector queueLengthDist;  // entry at position n is the total time the queue has had length n
+	private final TimeBasedStatistics stats;
+	private final TimeBasedFrequency freq;
 	protected long numberReneged;  // number of entities that reneged from the queue
 
 	{
 		defaultEntity.setHidden(true);
 		nextComponent.setHidden(true);
 
-		priority = new SampleInput("Priority", "Key Inputs", new SampleConstant(0));
+		priority = new SampleInput("Priority", KEY_INPUTS, new SampleConstant(0));
 		priority.setUnitType(DimensionlessUnit.class);
 		priority.setEntity(this);
 		priority.setValidRange(0.0d, Double.POSITIVE_INFINITY);
 		this.addInput(priority);
 
-		match = new StringProvInput("Match", "Key Inputs", null);
+		match = new StringProvInput("Match", KEY_INPUTS, null);
 		match.setUnitType(DimensionlessUnit.class);
 		match.setEntity(this);
 		this.addInput(match);
 
-		fifo = new BooleanInput("FIFO", "Key Inputs", true);
+		fifo = new BooleanInput("FIFO", KEY_INPUTS, true);
 		this.addInput(fifo);
 
-		renegeTime = new SampleInput("RenegeTime", "Key Inputs", null);
+		renegeTime = new SampleInput("RenegeTime", KEY_INPUTS, null);
 		renegeTime.setUnitType(TimeUnit.class);
 		renegeTime.setEntity(this);
 		renegeTime.setValidRange(0.0d, Double.POSITIVE_INFINITY);
 		this.addInput(renegeTime);
 
-		renegeCondition = new SampleInput("RenegeCondition", "Key Inputs", new SampleConstant(1));
+		renegeCondition = new SampleInput("RenegeCondition", KEY_INPUTS, new SampleConstant(1));
 		renegeCondition.setUnitType(DimensionlessUnit.class);
 		renegeCondition.setEntity(this);
 		renegeCondition.setValidRange(0.0d, 1.0d);
 		this.addInput(renegeCondition);
 
-		renegeDestination = new InterfaceEntityInput<>(Linkable.class, "RenegeDestination", "Key Inputs", null);
+		renegeDestination = new InterfaceEntityInput<>(Linkable.class, "RenegeDestination", KEY_INPUTS, null);
 		this.addInput(renegeDestination);
 
-		spacing = new ValueInput("Spacing", "Key Inputs", 0.0d);
+		spacing = new ValueInput("Spacing", KEY_INPUTS, 0.0d);
 		spacing.setUnitType(DistanceUnit.class);
 		spacing.setValidRange(0.0d, Double.POSITIVE_INFINITY);
 		this.addInput(spacing);
 
-		maxPerLine = new IntegerInput("MaxPerLine", "Key Inputs", Integer.MAX_VALUE);
+		maxPerLine = new IntegerInput("MaxPerLine", KEY_INPUTS, Integer.MAX_VALUE);
 		maxPerLine.setValidRange(1, Integer.MAX_VALUE);
 		this.addInput(maxPerLine);
 	}
 
 	public Queue() {
 		itemSet = new TreeSet<>();
-		queueLengthDist = new DoubleVector(10,10);
 		userList = new ArrayList<>();
 		matchMap = new HashMap<>();
+		stats = new TimeBasedStatistics();
+		freq = new TimeBasedFrequency(0, 10);
 	}
 
 	@Override
@@ -189,13 +188,10 @@ public class Queue extends LinkedComponent {
 		maxCount = -1;
 
 		// Clear statistics
-		startOfStatisticsCollection = 0.0;
-		timeOfLastUpdate = 0.0;
-		minElements = 0;
-		maxElements = 0;
-		elementSeconds = 0.0;
-		squaredElementSeconds = 0.0;
-		queueLengthDist.clear();
+		stats.clear();
+		stats.addValue(0.0d, 0.0d);
+		freq.clear();
+		freq.addValue(0.0d, 0);
 		numberReneged = 0;
 
 		// Identify the objects that use this queue
@@ -272,25 +268,26 @@ public class Queue extends LinkedComponent {
 	@Override
 	public void addEntity(DisplayEntity ent) {
 		super.addEntity(ent);
+		double simTime = getSimTime();
 
 		// Update the queue statistics
-		int queueSize = itemSet.size();  // present number of entities in the queue
-		this.updateStatistics(queueSize, queueSize+1);
+		stats.addValue(simTime, itemSet.size() + 1);
+		freq.addValue(simTime, itemSet.size() + 1);
 
 		// Build the entry for the entity
 		long n = this.getTotalNumberAdded();
 		if (!fifo.getValue())
 			n *= -1;
-		int pri = (int) priority.getValue().getNextSample(getSimTime());
+		int pri = (int) priority.getValue().getNextSample(simTime);
 		String m = null;
 		if (match.getValue() != null)
-			m = match.getValue().getNextString(getSimTime(), "%s", 1.0d, true);
+			m = match.getValue().getNextString(simTime, "%s", 1.0d, true);
 
 		EventHandle rh = null;
 		if (renegeTime.getValue() != null)
 			rh = new EventHandle();
 
-		QueueEntry entry = new QueueEntry(ent, n, pri, m, getSimTime(), ent.getOrientation(), rh);
+		QueueEntry entry = new QueueEntry(ent, n, pri, m, simTime, ent.getOrientation(), rh);
 
 		// Add the entity to the TreeSet of all the entities in the queue
 		boolean bool = itemSet.add(entry);
@@ -378,9 +375,11 @@ public class Queue extends LinkedComponent {
 	 * Removes a specified entity from the queue
 	 */
 	private DisplayEntity remove(QueueEntry entry) {
+		double simTime = getSimTime();
 
-		int queueSize = itemSet.size();  // present number of entities in the queue
-		this.updateStatistics(queueSize, queueSize-1);
+		// Update the queue statistics
+		stats.addValue(simTime, itemSet.size() - 1);
+		freq.addValue(simTime, itemSet.size() - 1);
 
 		// Remove the entity from the TreeSet of all entities in the queue
 		boolean found = itemSet.remove(entry);
@@ -462,6 +461,8 @@ public class Queue extends LinkedComponent {
 	 * @return first entity in the queue.
 	 */
 	public DisplayEntity getFirst() {
+		if (itemSet.isEmpty())
+			return null;
 		return itemSet.first().entity;
 	}
 
@@ -508,6 +509,16 @@ public class Queue extends LinkedComponent {
 		return matchSet.size();
 	}
 
+	public DisplayEntity getFirstForMatch(String m) {
+		if (m == null) {
+			return this.getFirst();
+		}
+		TreeSet<QueueEntry> matchSet = matchMap.get(m);
+		if (matchSet == null)
+			return null;
+		return matchSet.first().entity;
+	}
+
 	/**
 	 * Returns the first entity in the queue whose match value is equal to the
 	 * specified value. The returned entity is removed from the queue.
@@ -524,15 +535,6 @@ public class Queue extends LinkedComponent {
 		if (matchSet == null)
 			return null;
 		return this.remove(matchSet.first());
-	}
-
-	public ArrayList<String> getUniqueMatchValues() {
-		ArrayList<String> ret = new ArrayList<>(matchMap.size());
-		Iterator<String> itr = matchMap.keySet().iterator();
-		while (itr.hasNext()) {
-			ret.add(itr.next());
-		}
-		return ret;
 	}
 
 	/**
@@ -597,15 +599,14 @@ public class Queue extends LinkedComponent {
 		Queue shortest = null;
 		int count = -1;
 		for (Queue que : queueList) {
-			int n = que.getMatchValueCount(0.0);
-			if (n > count) {
-				count = n;
+			if (que.matchMap.size() > count) {
+				count = que.matchMap.size();
 				shortest = que;
 			}
 		}
 
 		// Return the first match value that has sufficient entities in each queue
-		for (String m : shortest.getUniqueMatchValues()) {
+		for (String m : shortest.matchMap.keySet()) {
 			if (Queue.sufficientEntities(queueList, numberList, m))
 				return m;
 		}
@@ -701,37 +702,11 @@ public class Queue extends LinkedComponent {
 	public void clearStatistics() {
 		super.clearStatistics();
 		double simTime = this.getSimTime();
-		startOfStatisticsCollection = simTime;
-		timeOfLastUpdate = simTime;
-		minElements = itemSet.size();
-		maxElements = itemSet.size();
-		elementSeconds = 0.0;
-		squaredElementSeconds = 0.0;
-		for (int i=0; i<queueLengthDist.size(); i++) {
-			queueLengthDist.set(i, 0.0d);
-		}
+		stats.clear();
+		stats.addValue(simTime, itemSet.size());
+		freq.clear();
+		freq.addValue(simTime, itemSet.size());
 		numberReneged = 0;
-	}
-
-	private void updateStatistics(int oldValue, int newValue) {
-
-		minElements = Math.min(newValue, minElements);
-		maxElements = Math.max(newValue, maxElements);
-
-		// Add the necessary number of additional bins to the queue length distribution
-		int n = newValue + 1 - queueLengthDist.size();
-		for (int i = 0; i < n; i++) {
-			queueLengthDist.add(0.0);
-		}
-
-		double simTime = this.getSimTime();
-		double dt = simTime - timeOfLastUpdate;
-		if (dt > 0.0) {
-			elementSeconds += dt * oldValue;
-			squaredElementSeconds += dt * oldValue * oldValue;
-			queueLengthDist.addAt(dt,oldValue);  // add dt to the entry at index queueSize
-			timeOfLastUpdate = simTime;
-		}
 	}
 
 	@Override
@@ -820,20 +795,13 @@ public class Queue extends LinkedComponent {
 		return ret;
 	}
 
-
 	@Output(name = "QueueLengthAverage",
 	 description = "The average number of entities in the queue.",
 	    unitType = DimensionlessUnit.class,
 	  reportable = true,
 	    sequence = 5)
 	public double getQueueLengthAverage(double simTime) {
-		double dt = simTime - timeOfLastUpdate;
-		int queueSize = itemSet.size();
-		double totalTime = simTime - startOfStatisticsCollection;
-		if (totalTime > 0.0) {
-			return (elementSeconds + dt*queueSize)/totalTime;
-		}
-		return 0.0;
+		return stats.getMean(simTime);
 	}
 
 	@Output(name = "QueueLengthStandardDeviation",
@@ -842,14 +810,7 @@ public class Queue extends LinkedComponent {
 	  reportable = true,
 	    sequence = 6)
 	public double getQueueLengthStandardDeviation(double simTime) {
-		double dt = simTime - timeOfLastUpdate;
-		int queueSize = itemSet.size();
-		double mean = this.getQueueLengthAverage(simTime);
-		double totalTime = simTime - startOfStatisticsCollection;
-		if (totalTime > 0.0) {
-			return Math.sqrt( (squaredElementSeconds + dt*queueSize*queueSize)/totalTime - mean*mean );
-		}
-		return 0.0;
+		return stats.getStandardDeviation(simTime);
 	}
 
 	@Output(name = "QueueLengthMinimum",
@@ -858,7 +819,7 @@ public class Queue extends LinkedComponent {
 	  reportable = true,
 	    sequence = 7)
 	public int getQueueLengthMinimum(double simTime) {
-		return minElements;
+		return (int) stats.getMin();
 	}
 
 	@Output(name = "QueueLengthMaximum",
@@ -869,9 +830,10 @@ public class Queue extends LinkedComponent {
 	public int getQueueLengthMaximum(double simTime) {
 		// An entity that is added to an empty queue and removed immediately
 		// does not count as a non-zero queue length
-		if (maxElements == 1 && queueLengthDist.get(1) == 0.0)
+		int ret = (int) stats.getMax();
+		if (ret == 1 && freq.getBinTime(simTime, 1) == 0.0d)
 			return 0;
-		return maxElements;
+		return ret;
 	}
 
 	@Output(name = "QueueLengthTimes",
@@ -879,14 +841,8 @@ public class Queue extends LinkedComponent {
 	    unitType = TimeUnit.class,
 	  reportable = true,
 	    sequence = 9)
-	public DoubleVector getQueueLengthDistribution(double simTime) {
-		DoubleVector ret = new DoubleVector(queueLengthDist);
-		double dt = simTime - timeOfLastUpdate;
-		int queueSize = itemSet.size();
-		if (ret.size() == 0)
-			ret.add(0.0);
-		ret.addAt(dt, queueSize);
-		return ret;
+	public double[] getQueueLengthDistribution(double simTime) {
+		return freq.getBinTimes(simTime);
 	}
 
 	@Output(name = "AverageQueueTime",
@@ -896,12 +852,7 @@ public class Queue extends LinkedComponent {
 	  reportable = true,
 	    sequence = 10)
 	public double getAverageQueueTime(double simTime) {
-		long n = this.getNumberAdded();
-		if (n == 0)
-			return 0.0;
-		double dt = simTime - timeOfLastUpdate;
-		int queueSize = itemSet.size();
-		return (elementSeconds + dt*queueSize)/n;
+		return stats.getSum(simTime) / getNumberAdded();
 	}
 
 	@Output(name = "MatchValueCount",
@@ -912,11 +863,52 @@ public class Queue extends LinkedComponent {
 		return matchMap.size();
 	}
 
+	@Output(name = "UniqueMatchValues",
+	 description = "The list of unique Match values for the entities in the queue.",
+	    sequence = 12)
+	public ArrayList<String> getUniqueMatchValues(double simTime) {
+		ArrayList<String> ret = new ArrayList<>(matchMap.keySet());
+		Collections.sort(ret);
+		return ret;
+	}
+
+	@Output(name = "MatchValueCountMap",
+	 description = "The number of entities in the queue for each Match expression value.\n"
+	             + "For example, '[Queue1].MatchValueCountMap(\"SKU1\")' returns the number of "
+	             + "entities whose Match value is \"SKU1\".",
+	    unitType = DimensionlessUnit.class,
+	    sequence = 13)
+	public LinkedHashMap<String, Integer> getMatchValueCountMap(double simTime) {
+		LinkedHashMap<String, Integer> ret = new LinkedHashMap<>(matchMap.size());
+		for (String m : getUniqueMatchValues(simTime)) {
+			ret.put(m, matchMap.get(m).size());
+		}
+		return ret;
+	}
+
+	@Output(name = "MatchValueMap",
+	 description = "Provides a list of entities in the queue for each Match expression value.\n"
+	             + "For example, '[Queue1].MatchValueMap(\"SKU1\")' returns a list of entities "
+	             + "whose Match value is \"SKU1\".",
+	    sequence = 14)
+	public LinkedHashMap<String, ArrayList<DisplayEntity>> getMatchValueMap(double simTime) {
+		LinkedHashMap<String, ArrayList<DisplayEntity>> ret = new LinkedHashMap<>(matchMap.size());
+		for (String m : getUniqueMatchValues(simTime)) {
+			TreeSet<QueueEntry> entrySet = matchMap.get(m);
+			ArrayList<DisplayEntity> list = new ArrayList<>(entrySet.size());
+			for (QueueEntry entry : entrySet) {
+				list.add(entry.entity);
+			}
+			ret.put(m, list);
+		}
+		return ret;
+	}
+
 	@Output(name = "NumberReneged",
 	 description = "The number of entities that reneged from the queue.",
 	    unitType = DimensionlessUnit.class,
 	  reportable = true,
-	    sequence = 12)
+	    sequence = 15)
 	public long getNumberReneged(double simTime) {
 		return numberReneged;
 	}
@@ -926,7 +918,7 @@ public class Queue extends LinkedComponent {
 	             + "First in queue = 1, second in queue = 2, etc.",
 	    unitType = DimensionlessUnit.class,
 	  reportable = false,
-	    sequence = 13)
+	    sequence = 16)
 	public long getQueuePosition(double simTime) {
 		DisplayEntity objEnt = this.getReceivedEntity(simTime);
 		if (objEnt == null)

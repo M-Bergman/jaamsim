@@ -1,7 +1,7 @@
 /*
  * JaamSim Discrete Event Simulation
  * Copyright (C) 2014 Ausenco Engineering Canada Inc.
- * Copyright (C) 2016 JaamSim Software Inc.
+ * Copyright (C) 2016-2018 JaamSim Software Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,8 +18,10 @@
 package com.jaamsim.input;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 
+import com.jaamsim.basicsim.ObjectType;
 import com.jaamsim.units.DimensionlessUnit;
 import com.jaamsim.units.Unit;
 
@@ -1028,6 +1030,15 @@ public class ExpParser {
 		return null;
 	}
 
+	public static ArrayList<String> getFunctionNames() {
+		ArrayList<String> ret = new ArrayList<>(functions.size());
+		for (FunctionEntry fe : functions) {
+			ret.add(fe.name);
+		}
+		Collections.sort(ret, Input.uiSortOrder);
+		return ret;
+	}
+
 	////////////////////////////////////////////////////////
 	// Statically initialize the operators and functions
 
@@ -1179,6 +1190,31 @@ public class ExpParser {
 		exp.validationResult = valRes;
 
 		return expNode;
+	}
+
+	public static void assertUnitType(Expression exp, Class<? extends Unit> unitType) {
+		if (exp.validationResult.state != ExpValResult.State.VALID
+				|| exp.validationResult.type != ExpResType.NUMBER)
+			return;
+
+		if (exp.validationResult.unitType != unitType) {
+			throw new InputErrorException("Invalid unit returned by an expression: '%s'%n"
+					+ "Received: %s, expected: %s",
+					exp,
+					ObjectType.getObjectTypeForClass(exp.validationResult.unitType),
+					ObjectType.getObjectTypeForClass(unitType));
+		}
+	}
+
+	public static void assertResultType(Expression exp, ExpResType type) {
+		if (exp.validationResult.state != ExpValResult.State.VALID)
+			return;
+
+		if (exp.validationResult.type != type) {
+			throw new InputErrorException("Incorrect result type returned by expression: '%s'%n"
+					+ "Received: %s, expected: %s",
+					exp, exp.validationResult.type, type);
+		}
 	}
 
 
@@ -1470,6 +1506,9 @@ public class ExpParser {
 	private static ArrayList<ExpNode> parseIndices(ParseContext context, TokenList tokens, Expression exp) throws ExpError {
 		tokens.next(); // consume '('
 		ExpTokenizer.Token peeked = tokens.peek();
+		if (peeked == null) {
+			throw new ExpError(exp.source, exp.source.length(), "Unexpected end of input in argument list");
+		}
 		if (peeked.value.equals(")")) {
 			// Empty list
 			tokens.next();
@@ -1482,6 +1521,9 @@ public class ExpParser {
 			indices.add(indexExp);
 
 			peeked = tokens.peek();
+			if (peeked == null) {
+				throw new ExpError(exp.source, exp.source.length(), "Unexpected end of input in argument list");
+			}
 			if (peeked.value.equals(")")) {
 				break;
 			}
@@ -1498,6 +1540,9 @@ public class ExpParser {
 
 	private static ExpNode parseLambda(ParseContext context, TokenList tokens, Expression exp, int pos) throws ExpError {
 		ExpTokenizer.Token peeked = tokens.peek();
+		if (peeked == null) {
+			throw new ExpError(exp.source, exp.source.length(), "Unexpected end of input in lambda parameter list");
+		}
 
 		ArrayList<String> vars = new ArrayList<>();
 		if (!peeked.value.equals("|")) {
@@ -1515,6 +1560,9 @@ public class ExpParser {
 				// consume var name
 				tokens.next();
 				peeked = tokens.peek();
+				if (peeked == null) {
+					throw new ExpError(exp.source, exp.source.length(), "Unexpected end of input in lambda parameter list");
+				}
 				if (peeked.value.equals("|")) {
 					break;
 				}

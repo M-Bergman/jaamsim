@@ -31,6 +31,7 @@ import com.jaamsim.input.FileInput;
 import com.jaamsim.input.Keyword;
 import com.jaamsim.math.Transform;
 import com.jaamsim.math.Vec3d;
+import com.jaamsim.render.CachedTexLoader;
 import com.jaamsim.render.DisplayModelBinding;
 import com.jaamsim.render.ImageProxy;
 import com.jaamsim.render.OverlayTextureProxy;
@@ -71,16 +72,16 @@ public class ImageModel extends DisplayModel {
 	}
 
 	{
-		imageFile = new FileInput( "ImageFile", "Key Inputs", null );
+		imageFile = new FileInput( "ImageFile", GRAPHICS, null );
 		imageFile.setFileType("Image");
 		imageFile.setValidFileExtensions(validFileExtensions);
 		imageFile.setValidFileDescriptions(validFileDescriptions);
 		this.addInput( imageFile);
 
-		transparent = new BooleanInput("Transparent", "Key Inputs", false);
+		transparent = new BooleanInput("Transparent", GRAPHICS, false);
 		this.addInput(transparent);
 
-		compressedTexture = new BooleanInput("CompressedTexture", "Key Inputs", false);
+		compressedTexture = new BooleanInput("CompressedTexture", GRAPHICS, false);
 		this.addInput(compressedTexture);
 
 	}
@@ -132,7 +133,7 @@ public class ImageModel extends DisplayModel {
 
 		private ArrayList<RenderProxy> cachedProxies;
 
-		private DisplayEntity dispEnt;
+		private final DisplayEntity dispEnt;
 
 		private Transform transCache;
 		private Vec3d scaleCache;
@@ -192,9 +193,9 @@ public class ImageModel extends DisplayModel {
 			registerCacheMiss("ImageModel");
 			// Gather some inputs
 
+			CachedTexLoader loader = new CachedTexLoader(imageName, transp, compressed);
 			cachedProxies = new ArrayList<>();
-			cachedProxies.add(new ImageProxy(imageName, trans,
-			                       scale, transp, compressed, vi, pickingID));
+			cachedProxies.add(new ImageProxy(loader, trans, scale, vi, pickingID));
 
 		}
 

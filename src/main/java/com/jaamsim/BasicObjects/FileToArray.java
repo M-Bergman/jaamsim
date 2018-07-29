@@ -1,6 +1,6 @@
 /*
  * JaamSim Discrete Event Simulation
- * Copyright (C) 2017 JaamSim Software Inc.
+ * Copyright (C) 2017-2018 JaamSim Software Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,7 +20,7 @@ import java.net.URI;
 
 import com.jaamsim.Graphics.DisplayEntity;
 import com.jaamsim.ProcessFlow.LinkedComponent;
-import com.jaamsim.input.EnumListInput;
+import com.jaamsim.basicsim.Entity;
 import com.jaamsim.input.ExpError;
 import com.jaamsim.input.ExpEvaluator;
 import com.jaamsim.input.ExpParser;
@@ -28,46 +28,35 @@ import com.jaamsim.input.ExpResult;
 import com.jaamsim.input.FileInput;
 import com.jaamsim.input.Input;
 import com.jaamsim.input.Keyword;
-import com.jaamsim.input.Parser;
 import com.jaamsim.units.TimeUnit;
 import com.jaamsim.input.ExpParser.Expression;
 
 public abstract class FileToArray extends LinkedComponent {
 
-	enum ValidFormats {
-		TIMESTAMP,
-		ENTITY,
-		STRING,
-		EXPRESSION,
-	}
-
-	@Keyword(description = "A file containing entries that are delimited by spaces and/or tabs.",
+	@Keyword(description = "A text file containing one or more records whose entries are "
+	                     + "delimited by tabs and/or spaces.\n\n"
+	                     + "The following types of entries can be used. "
+	                     + "If an entry includes spaces, double quotation marks, or curly braces, "
+	                     + "it must be enclosed by single quotation marks.\n"
+	                     + "- Comments. Records that begin with a # symbol are ignored (e.g. # abc)\n"
+	                     + "- Numbers with or without units, specified in expression format (e.g. 5.2[m])\n"
+	                     + "- Strings (e.g. 'quick red fox' or quick_red_fox)\n"
+	                     + "- Entity names (e.g. DisplayEntity1)\n"
+	                     + "- Time stamps in YYYY-MM-DD HH:MM:SS.SSS or YYYY-MM-DDTHH:MM:SS.SSS format "
+	                     + "(e.g. '2018-06-31 13:00:00.000' or 2018-06-31T13:00:00.000)\n"
+	                     + "- Arrays of numbers, entities, strings, or arrays, specified in expression format "
+	                     + "(e.g. '{ 5[m], \"abc\", [DisplayEntity1] }'\n"
+	                     + "- Expressions. A valid expression is executed and saved when the file is read "
+	                     + "(e.g. 1[m]/2[s] is saved as 1.0[m/s]). An invalid expression is saved as a string.",
 	         exampleList = {"'c:/test/data.txt'"})
 	private final FileInput dataFile;
-
-	@Keyword(description = "An optional list of data types that describe the entries in each "
-	                     + "column of the data file. The data type inputs cause the data file "
-	                     + "entries to be processed as follows:\n"
-	                     + "- TIMESTAMP: parse the data entry as a time stamp in "
-	                     + "'YYYY-MM-DD HH:MM:SS.SSS' or YYYY-MM-DDTHH:MM:SS.SSS format.\n"
-	                     + "- ENTITY: add square bracket around the data entry and parse it "
-	                     + "as an entity name.\n"
-	                     + "- STRING: add double quotes around the data entry and parse it "
-	                     + "as an string.\n"
-	                     + "- EXPRESSION: parse the data entry as an expression.",
-	         exampleList = { "TIMESTAMP ENTITY STRING STRING" })
-	private final EnumListInput<ValidFormats> dataFormat;
 
 	{
 		nextComponent.setRequired(false);
 
-		dataFile = new FileInput("DataFile", "Key Inputs", null);
+		dataFile = new FileInput("DataFile", KEY_INPUTS, null);
 		dataFile.setRequired(true);
 		this.addInput(dataFile);
-
-		dataFormat = new EnumListInput<>(ValidFormats.class, "DataFormat", "Key Inputs", null);
-		dataFormat.setDefaultText("EXPRESSION");
-		this.addInput(dataFormat);
 	}
 
 	public FileToArray() {}
@@ -79,7 +68,9 @@ public abstract class FileToArray extends LinkedComponent {
 		if (in == dataFile) {
 			if (dataFile.getValue() == null) {
 				clearValue();
+				return;
 			}
+			setValueForURI(dataFile.getValue(), 0.0d);
 			return;
 		}
 	}
@@ -97,34 +88,33 @@ public abstract class FileToArray extends LinkedComponent {
 		sendToNextComponent(ent);
 	}
 
-	protected ExpResult getExpResult(int i, String str, double simTime)
-	throws ExpError {
+	protected ExpResult getExpResult(int i, String str, double simTime) {
 
-		if (dataFormat.getValue() != null && i < dataFormat.getListSize()) {
-			switch (dataFormat.getValue().get(i)) {
-			case TIMESTAMP:
-				double time = 0.0d;
-				try {
-					time = Input.parseRFC8601DateTime(str)/1e6;
-				}
-				catch (Exception e) {
-					throw new ExpError(str, 0, e.getMessage());
-				}
+		// Is the entry a time stamp?
+		if (Input.isRFC8601DateTime(str)) {
+			try {
+				double time = Input.parseRFC8601DateTime(str)/1e6;
 				return ExpResult.makeNumResult(time, TimeUnit.class);
-			case ENTITY:
-				str = Parser.addEnclosure("[", str, "]");
-				break;
-			case STRING:
-				str = Parser.addEnclosure("\"", str, "\"");
-				break;
-			case EXPRESSION:
-				break;
 			}
+			catch (Exception e) {}
 		}
 
-		ExpEvaluator.EntityParseContext pc = ExpEvaluator.getParseContext(this, str);
-		Expression exp = ExpParser.parseExpression(pc, str);
-		return ExpEvaluator.evaluateExpression(exp, simTime);
+		// Is the entry an entity?
+		Entity ent = Entity.getNamedEntity(str);
+		if (ent != null) {
+			return ExpResult.makeEntityResult(ent);
+		}
+
+		// Is the entry a valid expression?
+		try {
+			ExpEvaluator.EntityParseContext pc = ExpEvaluator.getParseContext(this, str);
+			Expression exp = ExpParser.parseExpression(pc, str);
+			return ExpEvaluator.evaluateExpression(exp, simTime);
+		}
+		catch (ExpError e) {}
+
+		// If all else fails, return a string
+		return ExpResult.makeStringResult(str);
 	}
 
 	protected abstract void setValueForURI(URI uri, double simTime);

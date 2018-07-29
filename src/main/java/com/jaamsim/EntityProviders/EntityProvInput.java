@@ -1,6 +1,6 @@
 /*
  * JaamSim Discrete Event Simulation
- * Copyright (C) 2017 JaamSim Software Inc.
+ * Copyright (C) 2017-2018 JaamSim Software Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,6 +24,7 @@ import com.jaamsim.basicsim.Entity;
 import com.jaamsim.input.Input;
 import com.jaamsim.input.InputErrorException;
 import com.jaamsim.input.KeywordIndex;
+import com.jaamsim.input.Parser;
 
 public class EntityProvInput<T extends Entity> extends Input<EntityProvider<T>> {
 
@@ -40,6 +41,21 @@ public class EntityProvInput<T extends Entity> extends Input<EntityProvider<T>> 
 
 	public void setEntity(Entity ent) {
 		thisEnt = ent;
+	}
+
+	@Override
+	public void copyFrom(Input<?> in) {
+		super.copyFrom(in);
+
+		// An expression input must be re-parsed to reset the entity referred to by "this"
+		if (value instanceof EntityProvExpression<?>) {
+			parseFrom(in);
+		}
+	}
+
+	@Override
+	public String applyConditioning(String str) {
+		return Parser.addQuotesIfNeeded(str);
 	}
 
 	@Override
@@ -94,6 +110,31 @@ public class EntityProvInput<T extends Entity> extends Input<EntityProvider<T>> 
 			return;
 
 		toks.add(value.toString());
+	}
+
+	@Override
+	public boolean removeReferences(Entity ent) {
+		if (value instanceof EntityProvConstant) {
+			EntityProvConstant<T> epc = (EntityProvConstant<T>) value;
+			if (epc.getEntity() == ent) {
+				this.reset();
+				return true;
+			}
+		}
+		return false;
+	}
+
+	@Override
+	public boolean useExpressionBuilder() {
+		return true;
+	}
+
+	@Override
+	public String getPresentValueString(double simTime) {
+		if (value == null)
+			return "";
+
+		return String.format("[%s]", value.getNextEntity(simTime));
 	}
 
 }
