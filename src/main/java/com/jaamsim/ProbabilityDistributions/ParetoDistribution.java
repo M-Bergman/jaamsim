@@ -37,13 +37,13 @@ public class ParetoDistribution extends Distribution {
 		minValueInput.setDefaultValue(new SampleConstant(0.0d));
 		minValueInput.setValidRange(0.0, Double.POSITIVE_INFINITY);
 
-		scaleInput = new SampleInput("Scale", "Key Inputs", new SampleConstant(1.0d));
+		scaleInput = new SampleInput("Scale", KEY_INPUTS, new SampleConstant(1.0d));
 		scaleInput.setUnitType(UserSpecifiedUnit.class);
 		scaleInput.setValidRange( 1.0e-10d, Double.POSITIVE_INFINITY );
 		scaleInput.setEntity(this);
 		this.addInput(scaleInput);
 
-		shapeInput = new SampleInput("Shape", "Key Inputs", new SampleConstant(1.0d));
+		shapeInput = new SampleInput("Shape", KEY_INPUTS, new SampleConstant(1.0d));
 		shapeInput.setUnitType(DimensionlessUnit.class);
 		shapeInput.setValidRange( 1.0e-10d, Double.POSITIVE_INFINITY );
 		shapeInput.setEntity(this);

@@ -113,30 +113,30 @@ public class BatchStatistics extends Statistics {
 
 	{
 
-		varInput = new StringChoiceInput("InputType", "Key Inputs", 0);
+		varInput = new StringChoiceInput("InputType", KEY_INPUTS, 0);
 		varInput.setChoices(outputTypes);
 		varInput.setRequired(true);
 		this.addInput(varInput);
 
-		numIntervalsInput = new IntegerInput("MaxNumberIntervals", "Key Inputs", Integer.valueOf(40));
+		numIntervalsInput = new IntegerInput("MaxNumberIntervals", KEY_INPUTS, Integer.valueOf(40));
 		numIntervalsInput.setValidRange(2, Integer.MAX_VALUE);
 		this.addInput(numIntervalsInput);
 
 
-		minIntervalTimeInput = new ValueInput("ShortestInterval", "Key Inputs", Double.valueOf(900.0));
+		minIntervalTimeInput = new ValueInput("ShortestInterval", KEY_INPUTS, Double.valueOf(900.0));
 		minIntervalTimeInput.setUnitType(TimeUnit.class);
 		minIntervalTimeInput.setValidRange(1e-12, Double.POSITIVE_INFINITY);
 		//minIntervalTimeInput.setHidden(true);
 		this.addInput(minIntervalTimeInput);
 
 
-		minNumSamples = new IntegerInput("MinNumberSamplesInterval", "Key Inputs", Integer.valueOf(16));
+		minNumSamples = new IntegerInput("MinNumberSamplesInterval", KEY_INPUTS, Integer.valueOf(16));
 		minNumSamples.setValidRange(2, Integer.MAX_VALUE);
 		//minNumSamples.setHidden(true);
 		this.addInput(minNumSamples);
 
 
-		confIntInput = new ValueInput("PercentConfidence", "Key Inputs", Double.valueOf(95.0));
+		confIntInput = new ValueInput("PercentConfidence", KEY_INPUTS, Double.valueOf(95.0));
 		confIntInput.setValidRange(0.01, 99.99);
 		this.addInput(confIntInput);
 

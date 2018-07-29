@@ -109,36 +109,36 @@ public class BatchRecorder extends DisplayEntity {
 
 	{	// Initialisation
 
-		minIntervalWidth = new ValueInput("SmallestInterval", "Key Inputs", Double.valueOf(900.0));
+		minIntervalWidth = new ValueInput("SmallestInterval", KEY_INPUTS, Double.valueOf(900.0));
 		minIntervalWidth.setUnitType(TimeUnit.class);
 		minIntervalWidth.setValidRange(1e-15d, Double.POSITIVE_INFINITY);
 		this.addInput(minIntervalWidth);
 
 
-		numIntervalsIn = new IntegerInput("MaxNumberIntervals", "Key Inputs", Integer.valueOf(40));
+		numIntervalsIn = new IntegerInput("MaxNumberIntervals", KEY_INPUTS, Integer.valueOf(40));
 		numIntervalsIn.setValidRange(2, Integer.MAX_VALUE);
 		this.addInput(numIntervalsIn);
 
 
-		typeInput = new StringChoiceInput("InputType", "Key Inputs", InputType.ACCUMULATED.getOrd());
+		typeInput = new StringChoiceInput("InputType", KEY_INPUTS, InputType.ACCUMULATED.getOrd());
 		typeInput.setChoices(variableTypes);
 		//typeInput.setRequired(true);
 		this.addInput(typeInput);
 
 
-		unitType = new UnitTypeInput("UnitType", "Key Inputs", UserSpecifiedUnit.class);
+		unitType = new UnitTypeInput("UnitType", KEY_INPUTS, UserSpecifiedUnit.class);
 		unitType.setRequired(true);
 		this.addInput(unitType);
 
 
-		sampleValue = new SampleInput("SampleValue", "Key Inputs", null);
+		sampleValue = new SampleInput("SampleValue", KEY_INPUTS, null);
 		sampleValue.setUnitType(UserSpecifiedUnit.class);
 		sampleValue.setEntity(this);
 		sampleValue.setRequired(true);
 		this.addInput(sampleValue);
 
 
-		confIntInput = new ValueInput("PercentConfidence", "Key Inputs", Double.valueOf(95.0));
+		confIntInput = new ValueInput("PercentConfidence", KEY_INPUTS, Double.valueOf(95.0));
 		confIntInput.setValidRange(0.01, 99.99);
 		this.addInput(confIntInput);
 

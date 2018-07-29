@@ -93,15 +93,15 @@ public class SequentialSampler extends DisplayEntity {
 	{
 		ArrayList<Class<? extends Unit>> defList = new ArrayList<>();
 		defList.add(DimensionlessUnit.class);
-		unitTypeList = new UnitTypeListInput("UnitList", "Key Inputs", defList);
+		unitTypeList = new UnitTypeListInput("UnitList", KEY_INPUTS, defList);
 		this.addInput(unitTypeList);
 
-		outputMonitorList = new SampleListInput("DataList", "Key Inputs",new ArrayList<SampleProvider>());
+		outputMonitorList = new SampleListInput("DataList", KEY_INPUTS,new ArrayList<SampleProvider>());
 		outputMonitorList.setUnitType(UserSpecifiedUnit.class);
 		outputMonitorList.setEntity(this);
 		this.addInput(outputMonitorList);
 
-		halfWidthList = new SampleListInput("HalfWidths", "Key Inputs",new ArrayList<SampleProvider>());
+		halfWidthList = new SampleListInput("HalfWidths", KEY_INPUTS,new ArrayList<SampleProvider>());
 		halfWidthList.setUnitType(UserSpecifiedUnit.class);
 		halfWidthList.setValidRange(1e-9, Double.POSITIVE_INFINITY);
 		halfWidthList.setEntity(this);
@@ -110,7 +110,7 @@ public class SequentialSampler extends DisplayEntity {
 		DoubleVector dv = new DoubleVector();
 		dv.add(95.0);
 
-		confidencePercentList = new ValueListInput("ConfidencePercent", "Key Inputs", dv);
+		confidencePercentList = new ValueListInput("ConfidencePercent", KEY_INPUTS, dv);
 		confidencePercentList.setUnitType(DimensionlessUnit.class);
 		confidencePercentList.setValidRange(0.01, 99.99);
 		this.addInput(confidencePercentList);
