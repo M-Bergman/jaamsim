@@ -78,12 +78,15 @@ public class Vec3dListInput extends ListInput<ArrayList<Vec3d>> {
 		if (defValue == null || defValue.isEmpty())
 			return "";
 
+		double factor = Unit.getDisplayedUnitFactor(unitType);
+		String unitStr = Unit.getDisplayedUnit(unitType);
+
 		StringBuilder tmp = new StringBuilder();
 		for (Vec3d each: defValue) {
 
 			// blank space between elements
 			if (tmp.length() > 0)
-				tmp.append(SEPARATOR);
+				tmp.append(BRACE_SEPARATOR);
 
 			if (each == null) {
 				tmp.append("");
@@ -91,19 +94,20 @@ public class Vec3dListInput extends ListInput<ArrayList<Vec3d>> {
 			}
 
 			tmp.append("{");
+			tmp.append(BRACE_SEPARATOR);
+			tmp.append(each.x/factor);
 			tmp.append(SEPARATOR);
-			tmp.append(each.x);
+			tmp.append(each.y/factor);
 			tmp.append(SEPARATOR);
-			tmp.append(each.y);
-			tmp.append(SEPARATOR);
-			tmp.append(each.z);
-			tmp.append(SEPARATOR);
-			if (unitType != Unit.class) {
-				tmp.append(Unit.getSIUnit(unitType));
+			tmp.append(each.z/factor);
+			if (!unitStr.isEmpty()) {
 				tmp.append(SEPARATOR);
+				tmp.append(unitStr);
 			}
+			tmp.append(BRACE_SEPARATOR);
 			tmp.append("}");
 		}
 		return tmp.toString();
 	}
+
 }

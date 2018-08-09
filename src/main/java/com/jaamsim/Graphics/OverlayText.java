@@ -1,6 +1,7 @@
 /*
  * JaamSim Discrete Event Simulation
  * Copyright (C) 2013 Ausenco Engineering Canada Inc.
+ * Copyright (C) 2018 JaamSim Software Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,6 +33,9 @@ import com.jaamsim.input.StringInput;
 import com.jaamsim.input.StringListInput;
 import com.jaamsim.input.UnitTypeInput;
 import com.jaamsim.input.Vec3dInput;
+import com.jaamsim.math.Color4d;
+import com.jaamsim.math.Vec3d;
+import com.jaamsim.render.TessFontKey;
 import com.jaamsim.units.DimensionlessUnit;
 import com.jaamsim.units.Unit;
 
@@ -41,10 +45,6 @@ import com.jaamsim.units.Unit;
  *
  */
 public class OverlayText extends OverlayEntity {
-
-	@Keyword(description = "The height of the font as displayed in the view window. Unit is in pixels.",
-	         exampleList = {"15"})
-	private final IntegerInput textHeight;
 
 	@Keyword(description = "The fixed and variable text to be displayed. If spaces are included, "
 	                     + "enclose the text in single quotes. If variable text is to be "
@@ -83,6 +83,10 @@ public class OverlayText extends OverlayEntity {
 	         exampleList = { "Arial" })
 	private final StringChoiceInput fontName;
 
+	@Keyword(description = "The height of the font as displayed in the view window. Unit is in pixels.",
+	         exampleList = {"15"})
+	private final IntegerInput textHeight;
+
 	@Keyword(description = "The font styles to be applied to the text, e.g. Bold, Italic. ",
 	         exampleList = { "Bold" })
 	private final StringListInput fontStyle;
@@ -107,9 +111,7 @@ public class OverlayText extends OverlayEntity {
 	private String renderText;
 
 	{
-		textHeight = new IntegerInput("TextHeight", KEY_INPUTS, 15);
-		textHeight.setValidRange(0, 1000);
-		this.addInput(textHeight);
+		displayModelListInput.addValidClass(TextModel.class);
 
 		formatText = new StringInput("Format", KEY_INPUTS, "");
 		this.addInput(formatText);
@@ -134,6 +136,11 @@ public class OverlayText extends OverlayEntity {
 		fontName.setChoices(TextModel.validFontNames);
 		fontName.setDefaultText("TextModel");
 		this.addInput(fontName);
+
+		textHeight = new IntegerInput("TextHeight", FONT, 0);
+		textHeight.setValidRange(0, 1000);
+		textHeight.setDefaultText("TextModel");
+		this.addInput(textHeight);
 
 		fontColor = new ColourInput("FontColour", FONT, ColourInput.BLACK);
 		fontColor.setDefaultText("TextModel");
@@ -220,32 +227,61 @@ public class OverlayText extends OverlayEntity {
 		return renderText;
 	}
 
+	public TextModel getTextModel() {
+		return (TextModel) displayModelListInput.getValue().get(0);
+	}
+
+	public String getFontName() {
+		if (fontName.isDefault()) {
+			return getTextModel().getFontName();
+		}
+		return fontName.getChoice();
+	}
+
 	public int getTextHeight() {
+		if (textHeight.isDefault()) {
+			return (int) getTextModel().getTextHeight();
+		}
 		return textHeight.getValue();
 	}
 
-	public StringChoiceInput getFontNameInput() {
-		return fontName;
+	public int getStyle() {
+		if (fontStyle.isDefault()) {
+			return getTextModel().getStyle();
+		}
+		return TextModel.getStyle(fontStyle.getValue());
 	}
 
-	public StringListInput getFontStyleInput() {
-		return fontStyle;
+	public TessFontKey getTessFontKey() {
+		return new TessFontKey(getFontName(), getStyle());
 	}
 
-	public ColourInput getFontColorInput() {
-		return fontColor;
+	public Color4d getFontColor() {
+		if (fontColor.isDefault()) {
+			return getTextModel().getFontColor();
+		}
+		return fontColor.getValue();
 	}
 
-	public BooleanInput getDropShadowInput() {
-		return dropShadow;
+	public boolean getDropShadow() {
+		if (dropShadow.isDefault()) {
+			return getTextModel().getDropShadow();
+		}
+		return dropShadow.getValue();
 	}
 
-	public ColourInput getDropShadowColorInput() {
-		return dropShadowColor;
+	public Color4d getDropShadowColor() {
+		if (dropShadowColor.isDefault()) {
+			return getTextModel().getDropShadowColor();
+		}
+		return dropShadowColor.getValue();
 	}
 
-	public Vec3dInput getDropShadowOffsetInput() {
-		return dropShadowOffset;
+	public Vec3d getDropShadowOffset() {
+		if (dropShadowOffset.isDefault()) {
+			return getTextModel().getDropShadowOffset();
+		}
+		return dropShadowOffset.getValue();
 	}
 
 }

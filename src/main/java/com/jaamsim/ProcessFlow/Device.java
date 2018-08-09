@@ -153,9 +153,7 @@ public abstract class Device extends StateUserEntity {
 		// closure, then determine whether to change state and/or to continue to the next step
 		if (this.getSimTicks() == endTicks || this.isImmediateReleaseThresholdClosure()) {
 			stepCompleted = true;
-			boolean bool = this.processStep(simTime);
-			if (!bool)
-				return;
+			this.processStep(simTime);
 		}
 
 		// Start the next time step
@@ -286,7 +284,7 @@ public abstract class Device extends StateUserEntity {
 	 * @param simTime - present simulation time
 	 * @return indicates whether to start a new time step
 	 */
-	protected abstract boolean processStep(double simTime);
+	protected abstract void processStep(double simTime);
 
 	/**
 	 * Alerts other processes that the present process has changed.

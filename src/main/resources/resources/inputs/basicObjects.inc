@@ -3,10 +3,10 @@ Define ObjectType {
                     ScriptEntity
                     Output
                     InputValue
+                    InputBox
                     TimeSeries
                     TimeSeriesThreshold
                     ExpressionThreshold
-                    BooleanIndicator
                     ExpressionLogger
                     EntitlementSelector
                     ExpressionEntity
@@ -21,7 +21,7 @@ Define TextModel  {
                     InputValueModel
                   }
 
-Define ImageModel {
+Define IconModel  {
                     TimeSeriesIconModel
                     ExpLoggerIconModel
                     SelectorIconModel
@@ -47,10 +47,10 @@ Group                   JavaClass { com.jaamsim.basicsim.Group                  
 ScriptEntity            JavaClass { com.jaamsim.basicsim.ScriptEntity                   } Palette { 'Basic Objects' } DragAndDrop { FALSE }
 Output                  JavaClass { com.jaamsim.basicsim.OutputMethod                   } Palette { 'Basic Objects' } DragAndDrop { FALSE }
 InputValue              JavaClass { com.jaamsim.BasicObjects.InputValue                 } Palette { 'Basic Objects' } DefaultDisplayModel { InputValueModel     } IconFile { '<res>/images/InputValue-24.png'         }
+InputBox                JavaClass { com.jaamsim.Graphics.InputBox                       } Palette { 'Basic Objects' } DefaultDisplayModel { InputBoxModel       } IconFile { '<res>/images/InputValue-24.png'   } DragAndDrop { FALSE }
 TimeSeries              JavaClass { com.jaamsim.Samples.TimeSeries                      } Palette { 'Basic Objects' } DefaultDisplayModel { TimeSeriesIconModel } IconFile { '<res>/images/TimeSeries-24.png'   }
 TimeSeriesThreshold     JavaClass { com.jaamsim.Thresholds.TimeSeriesThreshold          } Palette { 'Basic Objects' } DefaultDisplayModel { Rectangle           } IconFile { '<res>/images/Threshold-24.png'    } DefaultSize { 0.5 0.5 0.0 m }
 ExpressionThreshold     JavaClass { com.jaamsim.Thresholds.ExpressionThreshold          } Palette { 'Basic Objects' } DefaultDisplayModel { Rectangle           } IconFile { '<res>/images/Threshold-24.png'    } DefaultSize { 0.5 0.5 0.0 m }
-BooleanIndicator        JavaClass { com.jaamsim.BasicObjects.BooleanIndicator           } Palette { 'Basic Objects' } DefaultDisplayModel { Circle              } IconFile { '<res>/images/BooleanIndicator-24.png' } DefaultSize { 0.25 0.25 0.0 m }
 ExpressionLogger        JavaClass { com.jaamsim.BasicObjects.ExpressionLogger           } Palette { 'Basic Objects' } DefaultDisplayModel { ExpLoggerIconModel  } IconFile { '<res>/images/ExpressionLogger-24.png' }
 EntitlementSelector     JavaClass { com.jaamsim.BasicObjects.EntitlementSelector        } Palette { 'Basic Objects' } DefaultDisplayModel { SelectorIconModel   } IconFile { '<res>/images/Selector-24.png'     }
 ExpressionEntity        JavaClass { com.jaamsim.BasicObjects.ExpressionEntity           } Palette { 'Basic Objects' } DefaultDisplayModel { ExpressionEntityIconModel   } IconFile { '<res>/images/ExpressionEntity-24.png' }
@@ -64,10 +64,10 @@ Group               Description { 'Collection of entities used as an convenience
 ScriptEntity        Description { 'Executes a series of commands in simulated time. Used primarily for recording videos.' }
 Output              Description { '???' }
 InputValue          Description { 'Provides a way to enter a numerical value directly into the simulation model screen.' }
+InputBox            Description { 'Text that provides an input value for the model.' }
 TimeSeries          Description { 'Provides a floating point number that changes in simulated time following a series of input values.' }
 TimeSeriesThreshold Description { 'Specifies a range of values from a TimeSeries for which an activity is permitted.' }
 ExpressionThreshold Description { 'Specifies a logical condition for which an activity is permitted.' }
-BooleanIndicator    Description { 'Circular entity that changes color to indicate TRUE and FALSE' }
 ExpressionLogger    Description { 'Records the values for one or more expressions to a log file at regular intervals.' }
 EntitlementSelector Description { 'Selects an index on the basis of entitlement from a given set of proportions.' }
 ExpressionEntity    Description { 'Calculates the value for a specified expression.' }

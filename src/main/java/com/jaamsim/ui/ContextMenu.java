@@ -38,6 +38,7 @@ import com.jaamsim.input.InputAgent;
 import com.jaamsim.input.InputErrorException;
 import com.jaamsim.input.KeywordIndex;
 import com.jaamsim.math.Vec3d;
+import com.jaamsim.units.DistanceUnit;
 
 public class ContextMenu {
 	private static final ArrayList<ContextMenuItem> menuItems = new ArrayList<>();
@@ -87,7 +88,7 @@ public class ContextMenu {
 
 			@Override
 			public void actionPerformed( ActionEvent event ) {
-				InputAgent.applyArgs(Simulation.getInstance(), "ShowInputEditor", "TRUE");
+				InputAgent.applyBoolean(Simulation.getInstance(), "ShowInputEditor", true);
 				FrameBox.setSelectedEntity(ent, false);
 			}
 		} );
@@ -99,7 +100,7 @@ public class ContextMenu {
 
 			@Override
 			public void actionPerformed( ActionEvent event ) {
-				InputAgent.applyArgs(Simulation.getInstance(), "ShowOutputViewer", "TRUE");
+				InputAgent.applyBoolean(Simulation.getInstance(), "ShowOutputViewer", true);
 				FrameBox.setSelectedEntity(ent, false);
 			}
 		} );
@@ -111,7 +112,7 @@ public class ContextMenu {
 
 			@Override
 			public void actionPerformed( ActionEvent event ) {
-				InputAgent.applyArgs(Simulation.getInstance(), "ShowPropertyViewer", "TRUE");
+				InputAgent.applyBoolean(Simulation.getInstance(), "ShowPropertyViewer", true);
 				FrameBox.setSelectedEntity(ent, false);
 			}
 		} );
@@ -218,9 +219,19 @@ public class ContextMenu {
 						if (ent.getCurrentRegion() != null)
 							InputAgent.applyArgs(newLabel, "Region", ent.getCurrentRegion().getName());
 
+						// Set the visible views to match its target entity
+						if (ent.getVisibleViews() != null) {
+							ArrayList<String> tokens = new ArrayList<>(ent.getVisibleViews().size());
+							for (View v : ent.getVisibleViews()) {
+								tokens.add(v.getName());
+							}
+							KeywordIndex kw = new KeywordIndex("VisibleViews", tokens, null);
+							InputAgent.apply(newLabel, kw);
+						}
+
 						// Set the label's position
 						double ypos = -0.15 - 0.5*ent.getSize().y;
-						InputAgent.apply(newLabel, InputAgent.formatPointInputs("Position", new Vec3d(0.0, ypos, 0.0), "m"));
+						InputAgent.apply(newLabel, InputAgent.formatVec3dInput("Position", new Vec3d(0.0, ypos, 0.0), DistanceUnit.class));
 
 						// Set the label's size
 						newLabel.resizeForText();
@@ -228,13 +239,13 @@ public class ContextMenu {
 					}
 
 					// Show the label
-					InputAgent.applyArgs(label, "Show", "TRUE");
+					InputAgent.applyBoolean(label, "Show", true);
 				}
 				else {
 
 					// Hide the label if it already exists
 					if (label != null)
-						InputAgent.applyArgs(label, "Show", "FALSE");
+						InputAgent.applyBoolean(label, "Show", false);
 				}
 			}
 		} );
@@ -244,7 +255,20 @@ public class ContextMenu {
 		menu.add( showLabelMenuItem );
 
 		// 3) Set RelativeEntity
-		ScrollableMenu setRelativeEntityMenu = new ScrollableMenu( "Set RelativeEntity" );
+		ScrollableMenu setRelativeEntityMenu = new ScrollableMenu( "Set RelativeEntity" ) {
+
+			@Override
+			public void setPopupMenuVisible(boolean bool) {
+				super.setPopupMenuVisible(bool);
+				if (!bool || ent.getRelativeEntity() == null)
+					return;
+				String presentEntName = ent.getRelativeEntity().getName();
+				int index = ent.getRelativeEntityOptions().indexOf(presentEntName);
+				if (index != -1) {
+					ensureIndexIsVisible(index + 1);  // Allows for the option <None>
+				}
+			}
+		};
 		ArrayList<String> entNameList = new ArrayList<>();
 		entNameList.add("<None>");
 		entNameList.addAll(ent.getRelativeEntityOptions());
@@ -279,7 +303,20 @@ public class ContextMenu {
 		menu.add( setRelativeEntityMenu );
 
 		// 4) Set Region
-		ScrollableMenu setRegionMenu = new ScrollableMenu( "Set Region" );
+		ScrollableMenu setRegionMenu = new ScrollableMenu( "Set Region" ) {
+
+			@Override
+			public void setPopupMenuVisible(boolean bool) {
+				super.setPopupMenuVisible(bool);
+				if (!bool || ent.getCurrentRegion() == null)
+					return;
+				String presentRegionName = ent.getCurrentRegion().getName();
+				int index = ent.getRegionOptions().indexOf(presentRegionName);
+				if (index != -1) {
+					ensureIndexIsVisible(index + 1);  // Allows for the option <None>
+				}
+			}
+		};
 		ArrayList<String> regionNameList = new ArrayList<>();
 		regionNameList.add("<None>");
 		regionNameList.addAll(ent.getRegionOptions());
@@ -325,8 +362,8 @@ public class ContextMenu {
 				viewPos.sub3(v.getGlobalCenter());
 				viewPos.add3(ent.getPosition());
 
-				KeywordIndex posKw = InputAgent.formatPointInputs("ViewPosition", viewPos, "m");
-				KeywordIndex ctrKw = InputAgent.formatPointInputs("ViewCenter", ent.getPosition(), "m");
+				KeywordIndex posKw = InputAgent.formatVec3dInput("ViewPosition", viewPos, DistanceUnit.class);
+				KeywordIndex ctrKw = InputAgent.formatVec3dInput("ViewCenter", ent.getPosition(), DistanceUnit.class);
 				InputAgent.storeAndExecute(new KeywordCommand(v, posKw, ctrKw));
 			}
 		} );
@@ -376,7 +413,9 @@ public class ContextMenu {
 				|| nodeIndex == ent.getPoints().size() - 1) {
 			spitMenuItem.setEnabled(false);
 		}
-		menu.add( spitMenuItem );
+		if (ent.usePointsInput()) {
+			menu.add( spitMenuItem );
+		}
 
 		// 7) Delete Node
 		JMenuItem deleteNodeItem = new JMenuItem( "Delete Node" );
@@ -394,7 +433,9 @@ public class ContextMenu {
 				|| ent.getPoints().size() <= 2) {
 			deleteNodeItem.setEnabled(false);
 		}
-		menu.add( deleteNodeItem );
+		if (ent.usePointsInput()) {
+			menu.add( deleteNodeItem );
+		}
 	}
 
 }

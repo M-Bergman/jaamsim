@@ -28,6 +28,7 @@ import java.util.Comparator;
 import javax.swing.JScrollPane;
 import javax.swing.JTabbedPane;
 import javax.swing.JTable;
+import javax.swing.SwingUtilities;
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
 import javax.swing.table.AbstractTableModel;
@@ -61,6 +62,9 @@ public class EditBox extends FrameBox {
 	private Entity currentEntity;
 	private final JTabbedPane jTabbedFrame;
 
+	private final ArrayList<EditTable> editTableList;
+	private int prevTab;
+
 	private final TableCellRenderer columnRender = new EditBoxColumnRenderer();
 
 	private String lastCategory = null;
@@ -70,14 +74,37 @@ public class EditBox extends FrameBox {
 		setDefaultCloseOperation(FrameBox.DISPOSE_ON_CLOSE);
 		addWindowListener(FrameBox.getCloseListener("ShowInputEditor"));
 
-		// Set the preferred size of the panes
+		editTableList = new ArrayList<>();
+
+		// Provide tabs for the editor
 		jTabbedFrame = new JTabbedPane();
-		jTabbedFrame.addChangeListener(new TabListener());
+		jTabbedFrame.addChangeListener(new ChangeListener()  {
+
+			@Override
+			public void stateChanged(ChangeEvent e) {
+				if (prevTab != -1 && editTableList.size() > prevTab) {
+					final CellEditor editor = editTableList.get(prevTab).getPresentCellEditor();
+					if (editor != null) {
+						// Wait for a change in selected entity to take effect
+						SwingUtilities.invokeLater(new Runnable() {
+							@Override
+							public void run() {
+								editor.stopCellEditing();
+							}
+						});
+					}
+				}
+				prevTab = jTabbedFrame.getSelectedIndex();
+				GUIFrame.updateUI();
+			}
+		});
 		getContentPane().add(jTabbedFrame);
 
+		// Set the size and position of the editor
 		setLocation(Simulation.getInputEditorPos().get(0), Simulation.getInputEditorPos().get(1));
 		setSize(Simulation.getInputEditorSize().get(0), Simulation.getInputEditorSize().get(1));
 
+		// Save changes to the editor's size and position
 		addComponentListener(new ComponentAdapter() {
 
 			@Override
@@ -127,9 +154,11 @@ public class EditBox extends FrameBox {
 
 		int initialTab = 0;
 		int curTab = 0;
+		editTableList.clear();
 		for (CategoryInputs each : getInputs(currentEntity)) {
 			EditTableModel mod = new EditTableModel(each);
-			JTable propTable = new EditTable(mod, columnRender);
+			EditTable propTable = new EditTable(currentEntity, curTab, mod, columnRender);
+			editTableList.add(propTable);
 			JScrollPane jScrollPane = new JScrollPane(propTable);
 			jScrollPane.getVerticalScrollBar().setUnitIncrement(ROW_HEIGHT);
 			jScrollPane.setColumnHeaderView( propTable.getTableHeader());
@@ -141,8 +170,10 @@ public class EditBox extends FrameBox {
 			curTab++;
 		}
 
+		prevTab = -1;
 		if (jTabbedFrame.getTabCount() > 0) {
 			jTabbedFrame.setSelectedIndex(initialTab);
+			prevTab = initialTab;
 		}
 	}
 
@@ -214,6 +245,11 @@ public class EditBox extends FrameBox {
 		return currentEntity;
 	}
 
+	public void setTab(int tab) {
+		jTabbedFrame.setSelectedIndex(tab);
+		prevTab = tab;
+	}
+
 	public static String formatEditorText(String str) {
 		return String.format("<html><i><font color=\"gray\">%s</font></i></html>", str);
 	}
@@ -221,13 +257,6 @@ public class EditBox extends FrameBox {
 	public static String formatErrorText(String str) {
 		return String.format("<html><font color=\"red\">%s</font></html>", str);
 	}
-
-private static class TabListener implements ChangeListener {
-	@Override
-	public void stateChanged(ChangeEvent e) {
-		GUIFrame.updateUI();
-	}
-}
 
 private static class CategoryInputs {
 	final String category;
@@ -312,6 +341,9 @@ private static class CategoryInputs {
 	public static final Comparator<CategoryInputs> categorySortOrder = new CategoryComparator();
 
 public static class EditTable extends JTable {
+	private final Entity entity;
+	private final int tab;
+
 	static int col1Width = 150;
 	static int col2Width = 100;
 	static int col3Width = 150;
@@ -323,13 +355,12 @@ public static class EditTable extends JTable {
 	private int retryRow;
 	private int retryCol;
 
-	@Override
-	public boolean isCellEditable( int row, int column ) {
-		return ( column == VALUE_COLUMN ); // Only Value column is editable
-	}
+	private CellEditor presentCellEditor;
 
-	public EditTable(EditTableModel mod, TableCellRenderer colRender) {
+	public EditTable(Entity ent, int tb, EditTableModel mod, TableCellRenderer colRender) {
 		super(mod);
+		entity = ent;
+		tab = tb;
 
 		this.setRowHeight(ROW_HEIGHT);
 		this.setRowSelectionAllowed(false);
@@ -344,6 +375,13 @@ public static class EditTable extends JTable {
 
 		this.getTableHeader().setFont(FrameBox.boldFont);
 		this.getTableHeader().setReorderingAllowed(false);
+
+		this.setPresentCellEditor(null);
+	}
+
+	@Override
+	public boolean isCellEditable( int row, int column ) {
+		return ( column == VALUE_COLUMN ); // Only Value column is editable
 	}
 
 	@Override
@@ -402,6 +440,8 @@ public static class EditTable extends JTable {
 			ret.setRetry(retryString);
 		}
 		retryString = null;
+
+		setPresentCellEditor(ret);
 		return ret;
 	}
 
@@ -437,6 +477,23 @@ public static class EditTable extends JTable {
 		retryRow = row;
 		retryCol = col;
 	}
+
+	public Entity getEntity() {
+		return entity;
+	}
+
+	public int getTab() {
+		return tab;
+	}
+
+	public CellEditor getPresentCellEditor() {
+		return presentCellEditor;
+	}
+
+	public void setPresentCellEditor(CellEditor editor) {
+		presentCellEditor = editor;
+	}
+
 }
 
 private static class EditTableModel extends AbstractTableModel {

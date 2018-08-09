@@ -1,6 +1,7 @@
 /*
  * JaamSim Discrete Event Simulation
  * Copyright (C) 2015 Ausenco Engineering Canada Inc.
+ * Copyright (C) 2018 JaamSim Software Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,8 +33,10 @@ import com.jaamsim.input.StringChoiceInput;
 import com.jaamsim.input.StringListInput;
 import com.jaamsim.input.ValueInput;
 import com.jaamsim.input.Vec3dInput;
+import com.jaamsim.math.Color4d;
 import com.jaamsim.math.Transform;
 import com.jaamsim.math.Vec3d;
+import com.jaamsim.render.TessFontKey;
 import com.jaamsim.units.DistanceUnit;
 import com.jogamp.newt.event.KeyEvent;
 
@@ -80,6 +83,7 @@ public abstract class TextBasics extends DisplayEntity {
 	private int numSelected = 0;       // number of characters selected (positive to the right of the insertion position)
 
 	{
+		displayModelListInput.addValidClass(TextModel.class);
 
 		fontName = new StringChoiceInput("FontName", FONT, -1);
 		fontName.setChoices(TextModel.validFontNames);
@@ -332,19 +336,8 @@ public abstract class TextBasics extends DisplayEntity {
 		if (count == 2)
 			editMode = true;
 
-		// Set up the transformation from global coordinates to the entity's coordinates
-		double height = textHeight.getValue();
-		TextModel tm = (TextModel) displayModelListInput.getValue().get(0);
-		Vec3d textsize = RenderManager.inst().getRenderedStringSize(tm.getTessFontKey(), height, editText);
-		Transform trans = getEntityTransForSize(textsize);
-
-		// Calculate the entity's coordinates for the mouse click
-		Vec3d entityCoord = new Vec3d();
-		trans.multAndTrans(globalCoord, entityCoord);
-
 		// Position the insertion point where the text was clicked
-		double insert = entityCoord.x + 0.5d*textsize.x;
-		insertPos = RenderManager.inst().getRenderedStringPosition(tm.getTessFontKey(), height, editText, insert);
+		insertPos = getStringPosition(globalCoord);
 		numSelected = 0;
 
 		// Double click selects a whole word
@@ -357,23 +350,9 @@ public abstract class TextBasics extends DisplayEntity {
 		if (!editMode)
 			return false;
 
-		// Set up the transformation from global coordinates to the entity's coordinates
-		double height = textHeight.getValue();
-		TextModel tm = (TextModel) displayModelListInput.getValue().get(0);
-		Vec3d textsize = RenderManager.inst().getRenderedStringSize(tm.getTessFontKey(), height, editText);
-		Transform trans = getEntityTransForSize(textsize);
-
-		// Calculate the entity's coordinates for the mouse click
-		Vec3d currentCoord = new Vec3d();
-		trans.multAndTrans(currentPt, currentCoord);
-		Vec3d firstCoord = new Vec3d();
-		trans.multAndTrans(firstPt, firstCoord);
-
 		// Set the start and end of highlighting
-		double insert = currentCoord.x + 0.5d*textsize.x;
-		double first = firstCoord.x + 0.5d*textsize.x;
-		insertPos = RenderManager.inst().getRenderedStringPosition(tm.getTessFontKey(), height, editText, insert);
-		int firstPos = RenderManager.inst().getRenderedStringPosition(tm.getTessFontKey(), height, editText, first);
+		insertPos = getStringPosition(currentPt);
+		int firstPos = getStringPosition(firstPt);
 		numSelected = firstPos - insertPos;
 		return true;
 	}
@@ -390,12 +369,34 @@ public abstract class TextBasics extends DisplayEntity {
 		return savedText;
 	}
 
+	/**
+	 * Returns the insert position in the present text that corresponds to the specified global
+	 * coordinate. Index 0 is located immediately before the first character in the text.
+	 * @param globalCoord - position in the global coordinate system
+	 * @return insert position in the text string
+	 */
+	public int getStringPosition(Vec3d globalCoord) {
+		double height = getTextHeight();
+		TessFontKey fontKey = getTessFontKey();
+
+		// Set up the transformation from global coordinates to the entity's coordinates
+		Vec3d textsize = RenderManager.inst().getRenderedStringSize(fontKey, height, editText);
+		Transform trans = getEntityTransForSize(textsize);
+
+		// Calculate the entity's coordinates for the mouse click
+		Vec3d entityCoord = new Vec3d();
+		trans.multAndTrans(globalCoord, entityCoord);
+
+		// Position the insertion point where the text was clicked
+		double insert = entityCoord.x + 0.5d*textsize.x;
+		int pos = RenderManager.inst().getRenderedStringPosition(fontKey, height, editText, insert);
+		return pos;
+	}
+
 	public Vec3d getTextSize() {
-		double height = textHeight.getValue();
-		TextModel tm = (TextModel) displayModelListInput.getValue().get(0);
-		if (textHeight.isDefault())
-			height = tm.getTextHeight();
-		return RenderManager.inst().getRenderedStringSize(tm.getTessFontKey(), height, savedText);
+		double height = getTextHeight();
+		TessFontKey fontKey = getTessFontKey();
+		return RenderManager.inst().getRenderedStringSize(fontKey, height, savedText);
 	}
 
 	public void resizeForText() {
@@ -405,7 +406,7 @@ public abstract class TextBasics extends DisplayEntity {
 		double length = textSize.x + textSize.y;
 		double height = 2.0 * textSize.y;
 		Vec3d newSize = new Vec3d(length, height, 0.0);
-		InputAgent.apply(this, InputAgent.formatPointInputs("Size", newSize, "m"));
+		InputAgent.apply(this, InputAgent.formatVec3dInput("Size", newSize, DistanceUnit.class));
 	}
 
 	public boolean isEditMode() {
@@ -420,32 +421,61 @@ public abstract class TextBasics extends DisplayEntity {
 		return numSelected;
 	}
 
-	public StringChoiceInput getFontNameInput() {
-		return fontName;
+	public TextModel getTextModel() {
+		return (TextModel) displayModelListInput.getValue().get(0);
 	}
 
-	public ValueInput getTextHeightInput() {
-		return textHeight;
+	public String getFontName() {
+		if (fontName.isDefault()) {
+			return getTextModel().getFontName();
+		}
+		return fontName.getChoice();
 	}
 
-	public StringListInput getFontStyleInput() {
-		return fontStyle;
+	public double getTextHeight() {
+		if (textHeight.isDefault()) {
+			return getTextModel().getTextHeight();
+		}
+		return textHeight.getValue();
 	}
 
-	public ColourInput getFontColorInput() {
-		return fontColor;
+	public int getStyle() {
+		if (fontStyle.isDefault()) {
+			return getTextModel().getStyle();
+		}
+		return TextModel.getStyle(fontStyle.getValue());
 	}
 
-	public BooleanInput getDropShadowInput() {
-		return dropShadow;
+	public TessFontKey getTessFontKey() {
+		return new TessFontKey(getFontName(), getStyle());
 	}
 
-	public ColourInput getDropShadowColorInput() {
-		return dropShadowColor;
+	public Color4d getFontColor() {
+		if (fontColor.isDefault()) {
+			return getTextModel().getFontColor();
+		}
+		return fontColor.getValue();
 	}
 
-	public Vec3dInput getDropShadowOffsetInput() {
-		return dropShadowOffset;
+	public boolean getDropShadow() {
+		if (dropShadow.isDefault()) {
+			return getTextModel().getDropShadow();
+		}
+		return dropShadow.getValue();
+	}
+
+	public Color4d getDropShadowColor() {
+		if (dropShadowColor.isDefault()) {
+			return getTextModel().getDropShadowColor();
+		}
+		return dropShadowColor.getValue();
+	}
+
+	public Vec3d getDropShadowOffset() {
+		if (dropShadowOffset.isDefault()) {
+			return getTextModel().getDropShadowOffset();
+		}
+		return dropShadowOffset.getValue();
 	}
 
 }

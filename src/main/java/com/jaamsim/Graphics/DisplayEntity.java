@@ -22,6 +22,8 @@ import java.util.HashMap;
 
 import com.jaamsim.Commands.KeywordCommand;
 import com.jaamsim.DisplayModels.DisplayModel;
+import com.jaamsim.DisplayModels.GraphModel;
+import com.jaamsim.DisplayModels.IconModel;
 import com.jaamsim.DisplayModels.ImageModel;
 import com.jaamsim.DisplayModels.PolylineModel;
 import com.jaamsim.DisplayModels.ShapeModel;
@@ -193,6 +195,9 @@ public class DisplayEntity extends Entity {
 		this.addInput(relativeEntity);
 
 		displayModelListInput = new EntityListInput<>( DisplayModel.class, "DisplayModel", GRAPHICS, null);
+		displayModelListInput.addInvalidClass(IconModel.class);
+		displayModelListInput.addInvalidClass(TextModel.class);
+		displayModelListInput.addInvalidClass(GraphModel.class);
 		this.addInput(displayModelListInput);
 		displayModelListInput.setUnique(false);
 
@@ -505,6 +510,10 @@ public class DisplayEntity extends Entity {
 	 */
 	public void setRegion( Region newRegion ) {
 		currentRegion = newRegion;
+	}
+
+	public ArrayList<View> getVisibleViews() {
+		return visibleViews.getValue();
 	}
 
 	/**
@@ -846,7 +855,7 @@ public class DisplayEntity extends Entity {
 
 	public void dragged(Vec3d newPos) {
 
-		KeywordIndex kw = InputAgent.formatPointInputs(positionInput.getKeyword(), newPos, "m");
+		KeywordIndex kw = InputAgent.formatVec3dInput(positionInput.getKeyword(), newPos, DistanceUnit.class);
 		InputAgent.apply(this, kw);
 
 		ArrayList<Vec3d> points = pointsInput.getValue();
@@ -895,7 +904,7 @@ public class DisplayEntity extends Entity {
 		if (Simulation.isSnapToGrid())
 			pos = Simulation.getSnapGridPosition(pos, pos, shift);
 
-		KeywordIndex kw = InputAgent.formatPointInputs(positionInput.getKeyword(), pos, "m");
+		KeywordIndex kw = InputAgent.formatVec3dInput(positionInput.getKeyword(), pos, DistanceUnit.class);
 		InputAgent.storeAndExecute(new KeywordCommand(this, kw));
 	}
 

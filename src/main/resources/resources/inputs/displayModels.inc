@@ -5,6 +5,7 @@ Define ObjectType {
                     PolylineModel
                     TextModel
                     GraphModel
+                    IconModel
                   }
 
 GraphModel      JavaClass { com.jaamsim.DisplayModels.GraphModel               } Palette { 'Display Models' }    DragAndDrop { FALSE }
@@ -13,6 +14,7 @@ TextModel       JavaClass { com.jaamsim.DisplayModels.TextModel                }
 ImageModel      JavaClass { com.jaamsim.DisplayModels.ImageModel               } Palette { 'Display Models' }    DragAndDrop { FALSE }
 ColladaModel    JavaClass { com.jaamsim.DisplayModels.ColladaModel             } Palette { 'Display Models' }    DragAndDrop { FALSE }
 ShapeModel      JavaClass { com.jaamsim.DisplayModels.ShapeModel               } Palette { 'Display Models' }    DragAndDrop { FALSE }
+IconModel       JavaClass { com.jaamsim.DisplayModels.IconModel                } Palette { 'Display Models' }    DragAndDrop { FALSE }
 
 Define ShapeModel {
                     Rectangle
@@ -42,12 +44,13 @@ RegionModelDefault ColladaFile { <res>/shapes/axis_text.dae }
 
 Define GraphModel     { GraphModelDefault          }
 
-Define TextModel      { TextModelDefault  EntityLabelModel  InputBoxModel  BillboardTextModel }
+Define TextModel      { TextModelDefault  EntityLabelModel  InputBoxModel  BillboardTextModel OverlayTextModel }
 EntityLabelModel  TextHeight { 0.15 m }
 BillboardTextModel  TextHeight { 10 m }
+OverlayTextModel    TextHeight { 15 m }
 
 Define PolylineModel  { PolylineModelDefault  ArrowModelDefault }
 ArrowModelDefault ShowArrowHead { TRUE }
 
-Define  ImageModel { VideoRecorderIconModel }
+Define  IconModel  { VideoRecorderIconModel }
 VideoRecorderIconModel ImageFile { '<res>/images/VideoRecorder-256.png' }

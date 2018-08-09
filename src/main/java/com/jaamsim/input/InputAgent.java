@@ -1,6 +1,7 @@
 /*
  * JaamSim Discrete Event Simulation
  * Copyright (C) 2009-2011 Ausenco Engineering Canada Inc.
+ * Copyright (C) 2018 JaamSim Software Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,7 +29,10 @@ import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.text.DecimalFormat;
+import java.text.NumberFormat;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -51,6 +55,7 @@ import com.jaamsim.math.Vec3d;
 import com.jaamsim.ui.GUIFrame;
 import com.jaamsim.ui.LogBox;
 import com.jaamsim.units.DimensionlessUnit;
+import com.jaamsim.units.DistanceUnit;
 import com.jaamsim.units.TimeUnit;
 import com.jaamsim.units.Unit;
 
@@ -72,6 +77,8 @@ public class InputAgent {
 
 	private static final String INP_ERR_DEFINEUSED = "The name: %s has already been used and is a %s";
 	private static final String[] EARLY_KEYWORDS = {"UnitType", "UnitTypeList", "DataFile", "AttributeDefinitionList", "CustomOutputList"};
+	private static final String[] GRAPHICS_PALETTES = {"Graphics Objects", "View", "Display Models"};
+	private static final String[] GRAPHICS_CATEGORIES = {Entity.GRAPHICS, Entity.FONT, Entity.GUI};
 
 	private static File reportDir;
 	private static FileEntity reportFile;     // file to which the output report will be written
@@ -771,6 +778,11 @@ public class InputAgent {
 		InputAgent.apply(ent, kw);
 	}
 
+	public static void applyBoolean(Entity ent, String keyword, boolean bool) {
+		KeywordIndex kw = formatBoolean(keyword, bool);
+		InputAgent.apply(ent, kw);
+	}
+
 	public static void applyIntegers(Entity ent, String keyword, int... args){
 		KeywordIndex kw = formatIntegers(keyword, args);
 		InputAgent.apply(ent, kw);
@@ -1238,36 +1250,37 @@ public class InputAgent {
 				continue;
 			newEntities.add(ent);
 		}
-		Collections.sort(newEntities, Input.uiSortOrder);
-
-		// Prepare a sorted list of all the new classes that were created
-		ArrayList<Class<? extends Entity>> newClasses = new ArrayList<>();
-		for (Entity ent : newEntities) {
-			if (!newClasses.contains(ent.getClass()))
-				newClasses.add(ent.getClass());
-		}
-		Collections.sort(newClasses, uiClassSortOrder);
+		Collections.sort(newEntities, uiEntitySortOrder);
 
 		// Add a blank line before the first object definition
-		if( !newClasses.isEmpty() )
+		if (!newEntities.isEmpty())
 			file.format("%n");
 
 		// Print the first part of the "Define" statement for this object type
-		for( Class<? extends Entity> newClass : newClasses ) {
-			ObjectType o = ObjectType.getObjectTypeForClass(newClass);
-			if (o == null)
-				throw new ErrorException("Cannot find object type for class: " + newClass.getName());
-			file.format("Define %s {", o.getName());
+		Class<? extends Entity> entClass = null;
+		for (Entity ent : newEntities) {
 
-			// Print the new instances that were defined
-			for (Entity ent : newEntities) {
-				if (ent.getClass() == newClass)
-					file.format(" %s ", ent.getName());
+			// Is the class different from the last one
+			if (ent.getClass() != entClass) {
 
+				// Close the previous Define statement
+				if (entClass != null) {
+					file.format("}%n");
+				}
+
+				// Start the new Define statement
+				entClass = ent.getClass();
+				ObjectType ot = ObjectType.getObjectTypeForClass(entClass);
+				file.format("Define %s {", ot.getName());
 			}
-			// Close the define statement
-			file.format("}%n");
+
+			// Print the entity name to the Define statement
+			file.format(" %s ", ent.getName());
 		}
+
+		// Close the define statement
+		if (!newEntities.isEmpty())
+			file.format("}%n");
 
 		// 3) WRITE THE INPUTS FOR SPECIAL KEYWORDS THAT MUST COME BEFORE THE OTHERS
 
@@ -1313,28 +1326,65 @@ public class InputAgent {
 
 		// 4) WRITE THE INPUTS FOR THE REMAINING KEYWORDS
 
-		// Identify the entities whose inputs were edited
+		// 4.1) Non-graphics inputs for non-graphic entities
+		entClass = null;
 		for (Entity ent : entityList) {
+			if (isGraphicsEntity(ent))
+				continue;
+
+			// Print a header if the entity class is new
+			if (ent.getClass() != entClass) {
+				entClass = ent.getClass();
+				if (entClass != Simulation.class) {
+					ObjectType ot = ObjectType.getObjectTypeForClass(entClass);
+					file.format("%n");
+					file.format("# *** %s ***%n", ot);
+				}
+			}
 			file.format("%n");
 
-			ArrayList<Input<?>> deferredInputs = new ArrayList<>();
-			// Print the key inputs first
 			for (Input<?> in : ent.getEditableInputs()) {
-				if (in.isSynonym())
+				if (in.isSynonym() || !in.isEdited() || isEarlyInput(in) || isGraphicsInput(in))
 					continue;
-				if (!in.isEdited() || matchesKey(in.getKeyword(), EARLY_KEYWORDS))
-					continue;
-
-				// defer all inputs outside the Key Inputs category
-				if (!Entity.KEY_INPUTS.equals(in.getCategory())) {
-					deferredInputs.add(in);
-					continue;
-				}
-
 				writeInputOnFile_ForEntity(file, ent, in);
 			}
+		}
 
-			for (Input<?> in : deferredInputs) {
+		// 4.2) Graphics inputs for non-graphic entities
+		file.format("%n");
+		file.format("# *** GRAPHICS INPUTS ***%n");
+		for (Entity ent : entityList) {
+			if (isGraphicsEntity(ent))
+				continue;
+			file.format("%n");
+
+			for (Input<?> in : ent.getEditableInputs()) {
+				if (in.isSynonym() || !in.isEdited() || isEarlyInput(in) || !isGraphicsInput(in))
+					continue;
+				writeInputOnFile_ForEntity(file, ent, in);
+			}
+		}
+
+		// 4.3) All inputs for graphic entities
+		entClass = null;
+		for (Entity ent : entityList) {
+			if (!isGraphicsEntity(ent))
+				continue;
+
+			// Print a header if the entity class is new
+			if (ent.getClass() != entClass) {
+				entClass = ent.getClass();
+				if (entClass != Simulation.class) {
+					ObjectType ot = ObjectType.getObjectTypeForClass(entClass);
+					file.format("%n");
+					file.format("# *** %s ***%n", ot);
+				}
+			}
+			file.format("%n");
+
+			for (Input<?> in : ent.getEditableInputs()) {
+				if (in.isSynonym() || !in.isEdited() || isEarlyInput(in))
+					continue;
 				writeInputOnFile_ForEntity(file, ent, in);
 			}
 		}
@@ -1346,12 +1396,19 @@ public class InputAgent {
 		setSessionEdited(false);
 	}
 
-	private static boolean matchesKey(String key, String[] keys) {
-		for (int i=0; i<keys.length; i++) {
-			if (keys[i].equals(key))
-				return true;
-		}
-		return false;
+	public static boolean isEarlyInput(Input<?> in) {
+		String key = in.getKeyword();
+		return Arrays.asList(EARLY_KEYWORDS).contains(key);
+	}
+
+	public static boolean isGraphicsInput(Input<?> in) {
+		String cat = in.getCategory();
+		return Arrays.asList(GRAPHICS_CATEGORIES).contains(cat);
+	}
+
+	public static boolean isGraphicsEntity(Entity ent) {
+		String pal = ent.getObjectType().getPaletteName();
+		return Arrays.asList(GRAPHICS_PALETTES).contains(pal);
 	}
 
 	static void writeInputOnFile_ForEntity(FileEntity file, Entity ent, Input<?> in) {
@@ -1480,8 +1537,8 @@ public class InputAgent {
 		if (Simulation.isMultipleRuns())
 			reportFile.format("%s%n%n", Simulation.getRunHeader());
 
-		// Identify the classes that were used in the model
-		ArrayList<Class<? extends Entity>> newClasses = new ArrayList<>();
+		// Prepare a sorted list of entities
+		ArrayList<Entity> entList = new ArrayList<>();
 		for (Entity ent : Entity.getClonesOfIterator(Entity.class)) {
 
 			if (ent.testFlag(Entity.FLAG_GENERATED))
@@ -1490,38 +1547,26 @@ public class InputAgent {
 			if (!ent.isReportable())
 				continue;
 
-			if (!newClasses.contains(ent.getClass()))
-				newClasses.add(ent.getClass());
+			entList.add(ent);
 		}
+		Collections.sort(entList, uiEntitySortOrder);
 
-		// Sort the classes by the names of their object types, except for Simulation
-		// which is first on the list
-		Collections.sort(newClasses, uiClassSortOrder);
+		// Loop through the entities
+		Class<? extends Entity> entClass = null;
+		for (Entity ent : entList) {
 
-		// Loop through the classes and identify the instances
-		for (Class<? extends Entity> newClass : newClasses) {
-			ArrayList<Entity> entList = new ArrayList<>();
-			for (Entity ent : Entity.getClonesOfIterator(Entity.class)) {
-
-				if (ent.testFlag(Entity.FLAG_GENERATED))
-					continue;
-
-				if (ent.getClass() == newClass)
-					entList.add(ent);
+			// Print a header if the entity class is new
+			if (ent.getClass() != entClass) {
+				entClass = ent.getClass();
+				if (entClass != Simulation.class) {
+					ObjectType ot = ObjectType.getObjectTypeForClass(entClass);
+					reportFile.format("*** %s ***%n%n", ot);
+				}
 			}
 
-			// Sort the entities alphabetically by their names
-			Collections.sort(entList, Input.uiSortOrder);
-
-			// Print a header for this class
-			if (newClass != Simulation.class)
-				reportFile.format("*** %s ***%n%n", ObjectType.getObjectTypeForClass(newClass));
-
-			// Print each entity to the output report
-			for (Entity ent : entList) {
-				ent.printReport(reportFile, simTime);
-				reportFile.format("%n");
-			}
+			// Print the report for the entity
+			ent.printReport(reportFile, simTime);
+			reportFile.format("%n");
 		}
 
 		// Close the report file
@@ -1531,26 +1576,6 @@ public class InputAgent {
 		}
 	}
 
-	private static class ClassComparator implements Comparator<Class<? extends Entity>> {
-		@Override
-		public int compare(Class<? extends Entity> class0, Class<? extends Entity> class1) {
-
-			// Place the Simulation class in the first position
-			if (class0 == Simulation.class && class1 == Simulation.class)
-				return 0;
-			if (class0 == Simulation.class && class1 != Simulation.class)
-				return -1;
-			if (class0 != Simulation.class && class1 == Simulation.class)
-				return 1;
-
-			// Sort alphabetically by Object Type name
-			ObjectType ot0 = ObjectType.getObjectTypeForClass(class0);
-			ObjectType ot1 = ObjectType.getObjectTypeForClass(class1);
-			return Input.uiSortOrder.compare(ot0, ot1);
-		}
-	}
-	public static final Comparator<Class<? extends Entity>> uiClassSortOrder = new ClassComparator();
-
 	private static class EntityComparator implements Comparator<Entity> {
 		@Override
 		public int compare(Entity ent0, Entity ent1) {
@@ -1558,14 +1583,35 @@ public class InputAgent {
 			// Place the Simulation entity in the first position
 			Class<? extends Entity> class0 = ent0.getClass();
 			Class<? extends Entity> class1 = ent1.getClass();
-			if (class0 == Simulation.class && class1 == Simulation.class)
-				return 0;
-			if (class0 == Simulation.class && class1 != Simulation.class)
-				return -1;
-			if (class0 != Simulation.class && class1 == Simulation.class)
-				return 1;
+			boolean isSim0 = (class0 == Simulation.class);
+			boolean isSim1 = (class1 == Simulation.class);
+			int ret = Boolean.compare(isSim1, isSim0);  // Simulation goes first
+			if (ret != 0)
+				return ret;
 
-			// Otherwise, sort in natural order
+			ObjectType ot0 = ObjectType.getObjectTypeForClass(class0);
+			ObjectType ot1 = ObjectType.getObjectTypeForClass(class1);
+			String pal0 = ot0.getPaletteName();
+			String pal1 = ot1.getPaletteName();
+
+			// Otherwise, first sort by graphics vs non-graphics palettes
+			boolean isGraf0 = Arrays.asList(GRAPHICS_PALETTES).contains(pal0);
+			boolean isGraf1 = Arrays.asList(GRAPHICS_PALETTES).contains(pal1);
+			ret = Boolean.compare(isGraf0, isGraf1);  // Non-graphics goes first
+			if (ret != 0)
+				return ret;
+
+			// If the graphics types are the same, then sort alphabetically by palette name
+			ret = Input.uiSortOrder.compare(pal0, pal1);
+			if (ret != 0)
+				return ret;
+
+			// If the palettes are the same, then sort alphabetically by class name
+			ret = Input.uiSortOrder.compare(ot0, ot1);
+			if (ret != 0)
+				return ret;
+
+			// If the classes are the same, then sort alphabetically by entity name
 			return Input.uiSortOrder.compare(ent0, ent1);
 		}
 	}
@@ -1818,13 +1864,20 @@ public class InputAgent {
 	}
 
 	public static KeywordIndex formatPointsInputs(String keyword, ArrayList<Vec3d> points, Vec3d offset) {
+		String unitStr = Unit.getDisplayedUnit(DistanceUnit.class);
+		double factor = Unit.getDisplayedUnitFactor(DistanceUnit.class);
+
+		NumberFormat nf = NumberFormat.getNumberInstance(Locale.US);
+		DecimalFormat df = (DecimalFormat)nf;
+		df.applyPattern("0.0#####");
+
 		ArrayList<String> tokens = new ArrayList<>(points.size() * 6);
 		for (Vec3d v : points) {
 			tokens.add("{");
-			tokens.add(String.format((Locale)null, "%.3f", v.x + offset.x));
-			tokens.add(String.format((Locale)null, "%.3f", v.y + offset.y));
-			tokens.add(String.format((Locale)null, "%.3f", v.z + offset.z));
-			tokens.add("m");
+			tokens.add(df.format((v.x + offset.x)/factor));
+			tokens.add(df.format((v.y + offset.y)/factor));
+			tokens.add(df.format((v.z + offset.z)/factor));
+			tokens.add(unitStr);
 			tokens.add("}");
 		}
 
@@ -1832,13 +1885,20 @@ public class InputAgent {
 		return new KeywordIndex(keyword, tokens, null);
 	}
 
-	public static KeywordIndex formatPointInputs(String keyword, Vec3d point, String unit) {
+	public static KeywordIndex formatVec3dInput(String keyword, Vec3d point, Class<? extends Unit> ut) {
+		String unitStr = Unit.getDisplayedUnit(ut);
+		double factor = Unit.getDisplayedUnitFactor(ut);
+
+		NumberFormat nf = NumberFormat.getNumberInstance(Locale.US);
+		DecimalFormat df = (DecimalFormat)nf;
+		df.applyPattern("0.0#####");
+
 		ArrayList<String> tokens = new ArrayList<>(4);
-		tokens.add(String.format((Locale)null, "%.6f", point.x));
-		tokens.add(String.format((Locale)null, "%.6f", point.y));
-		tokens.add(String.format((Locale)null, "%.6f", point.z));
-		if (unit != null)
-			tokens.add(unit);
+		tokens.add(df.format(point.x/factor));
+		tokens.add(df.format(point.y/factor));
+		tokens.add(df.format(point.z/factor));
+		if (!unitStr.isEmpty())
+			tokens.add(unitStr);
 
 		// Parse the keyword inputs
 		return new KeywordIndex(keyword, tokens, null);
@@ -1850,6 +1910,13 @@ public class InputAgent {
 			tokens.add(each);
 		}
 		return new KeywordIndex(keyword, tokens, null);
+	}
+
+	public static KeywordIndex formatBoolean(String keyword, boolean bool) {
+		String str = "FALSE";
+		if (bool)
+			str = "TRUE";
+		return formatArgs(keyword, str);
 	}
 
 	public static KeywordIndex formatIntegers(String keyword, int... args) {

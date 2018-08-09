@@ -1,6 +1,7 @@
 /*
  * JaamSim Discrete Event Simulation
  * Copyright (C) 2013 Ausenco Engineering Canada Inc.
+ * Copyright (C) 2018 JaamSim Software Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -39,6 +40,7 @@ import com.jaamsim.input.IntegerListInput;
 import com.jaamsim.input.KeyedVec3dInput;
 import com.jaamsim.input.Keyword;
 import com.jaamsim.input.KeywordIndex;
+import com.jaamsim.input.Output;
 import com.jaamsim.input.StringInput;
 import com.jaamsim.input.Vec3dInput;
 import com.jaamsim.math.Transform;
@@ -371,8 +373,8 @@ public class View extends Entity {
 				tempPos.sub3(followEntityInput.getValue().getGlobalPosition(), tempPos);
 			}
 
-			KeywordIndex posKw = InputAgent.formatPointInputs("ViewPosition", tempPos, "m");
-			KeywordIndex ctrKw = InputAgent.formatPointInputs("ViewCenter", tempCent, "m");
+			KeywordIndex posKw = InputAgent.formatVec3dInput("ViewPosition", tempPos, DistanceUnit.class);
+			KeywordIndex ctrKw = InputAgent.formatVec3dInput("ViewCenter", tempCent, DistanceUnit.class);
 			InputAgent.storeAndExecute(new KeywordCommand(this, posKw, ctrKw));
 		}
 	}
@@ -487,6 +489,33 @@ public class View extends Entity {
 
 	public void update(double simTime) {
 		cachedSimTime = simTime;
+	}
+
+	@Output(name = "PointOfInterest",
+	 description = "The point at which the view will zoom towards or rotate around.",
+	    unitType = DistanceUnit.class,
+	    sequence = 1)
+	public Vec3d getPointOfInterest(double simTime) {
+		if (!RenderManager.isGood())
+			return null;
+		return RenderManager.inst().getPOI(this);
+	}
+
+	@Output(name = "DistanceToPOI",
+	 description = "The distance from the camera position to the point of interest.",
+	    unitType = DistanceUnit.class,
+	    sequence = 2)
+	public double geDistanceToPOI(double simTime) {
+		if (!RenderManager.isGood())
+			return Double.NaN;
+
+		Vec3d poi = RenderManager.inst().getPOI(this);
+		if (poi == null)
+			return Double.NaN;
+
+		Vec3d vec = new Vec3d(getViewPosition());
+		vec.sub3(poi);
+		return vec.mag3();
 	}
 
 }

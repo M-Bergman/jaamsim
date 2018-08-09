@@ -1,7 +1,7 @@
 /*
  * JaamSim Discrete Event Simulation
  * Copyright (C) 2002-2011 Ausenco Engineering Canada Inc.
- * Copyright (C) 2016-2017 JaamSim Software Inc.
+ * Copyright (C) 2016-2018 JaamSim Software Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -43,6 +43,8 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.InputStreamReader;
 import java.net.URL;
+import java.text.DecimalFormat;
+import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.Locale;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -78,6 +80,7 @@ import javax.swing.event.MenuListener;
 import javax.swing.filechooser.FileNameExtensionFilter;
 
 import com.jaamsim.Commands.Command;
+import com.jaamsim.Commands.DefineCommand;
 import com.jaamsim.Commands.DefineViewCommand;
 import com.jaamsim.Commands.KeywordCommand;
 import com.jaamsim.Graphics.DisplayEntity;
@@ -530,10 +533,10 @@ public class GUIFrame extends OSFixJFrame implements EventTimeListener, EventErr
 			@Override
 			public void actionPerformed( ActionEvent event ) {
 				Simulation sim = Simulation.getInstance();
-				InputAgent.applyArgs(sim, "ShowModelBuilder", "TRUE");
-				InputAgent.applyArgs(sim, "ShowObjectSelector", "TRUE");
-				InputAgent.applyArgs(sim, "ShowInputEditor", "TRUE");
-				InputAgent.applyArgs(sim, "ShowOutputViewer", "TRUE");
+				InputAgent.applyBoolean(sim, "ShowModelBuilder", true);
+				InputAgent.applyBoolean(sim, "ShowObjectSelector", true);
+				InputAgent.applyBoolean(sim, "ShowInputEditor", true);
+				InputAgent.applyBoolean(sim, "ShowOutputViewer", true);
 			}
 		} );
 		viewMenu.add( showBasicToolsMenuItem );
@@ -546,12 +549,12 @@ public class GUIFrame extends OSFixJFrame implements EventTimeListener, EventErr
 			@Override
 			public void actionPerformed( ActionEvent event ) {
 				Simulation sim = Simulation.getInstance();
-				InputAgent.applyArgs(sim, "ShowModelBuilder", "FALSE");
-				InputAgent.applyArgs(sim, "ShowObjectSelector", "FALSE");
-				InputAgent.applyArgs(sim, "ShowInputEditor", "FALSE");
-				InputAgent.applyArgs(sim, "ShowOutputViewer", "FALSE");
-				InputAgent.applyArgs(sim, "ShowPropertyViewer", "FALSE");
-				InputAgent.applyArgs(sim, "ShowLogViewer", "FALSE");
+				InputAgent.applyBoolean(sim, "ShowModelBuilder", false);
+				InputAgent.applyBoolean(sim, "ShowObjectSelector", false);
+				InputAgent.applyBoolean(sim, "ShowInputEditor", false);
+				InputAgent.applyBoolean(sim, "ShowOutputViewer", false);
+				InputAgent.applyBoolean(sim, "ShowPropertyViewer", false);
+				InputAgent.applyBoolean(sim, "ShowLogViewer", false);
 			}
 		} );
 		viewMenu.add( closeAllToolsMenuItem );
@@ -923,10 +926,7 @@ public class GUIFrame extends OSFixJFrame implements EventTimeListener, EventErr
 			public void actionPerformed( ActionEvent event ) {
 				DisplayEntity ent = (DisplayEntity) Entity.getNamedEntity("XYZ-Axis");
 				if (ent != null) {
-					if (xyzAxis.isSelected())
-						InputAgent.applyArgs(ent, "Show", "TRUE");
-					else
-						InputAgent.applyArgs(ent, "Show", "FALSE");
+					InputAgent.applyBoolean(ent, "Show", xyzAxis.isSelected());
 				}
 			}
 		} );
@@ -944,11 +944,16 @@ public class GUIFrame extends OSFixJFrame implements EventTimeListener, EventErr
 			@Override
 			public void actionPerformed( ActionEvent event ) {
 				DisplayEntity ent = (DisplayEntity) Entity.getNamedEntity("XY-Grid");
+				if (ent == null && Entity.getNamedEntity("Grid100x100") != null) {
+					InputAgent.storeAndExecute(new DefineCommand(DisplayEntity.class, "XY-Grid"));
+					ent = (DisplayEntity) Entity.getNamedEntity("XY-Grid");
+					KeywordIndex dmKw = InputAgent.formatArgs("DisplayModel", "Grid100x100");
+					KeywordIndex sizeKw = InputAgent.formatArgs("Size", "100", "100", "0", "m");
+					InputAgent.storeAndExecute(new KeywordCommand(ent, dmKw, sizeKw));
+					grid.setSelected(true);
+				}
 				if (ent != null) {
-					if (grid.isSelected())
-						InputAgent.applyArgs(ent, "Show", "TRUE");
-					else
-						InputAgent.applyArgs(ent, "Show", "FALSE");
+					InputAgent.applyBoolean(ent, "Show", grid.isSelected());
 				}
 			}
 		} );
@@ -965,10 +970,7 @@ public class GUIFrame extends OSFixJFrame implements EventTimeListener, EventErr
 
 			@Override
 			public void actionPerformed( ActionEvent event ) {
-				if (snapToGrid.isSelected())
-					InputAgent.applyArgs(Simulation.getInstance(), "SnapToGrid", "TRUE");
-				else
-					InputAgent.applyArgs(Simulation.getInstance(), "SnapToGrid", "FALSE");
+				InputAgent.applyBoolean(Simulation.getInstance(), "SnapToGrid", snapToGrid.isSelected());
 			}
 		} );
 		buttonBar.add(Box.createRigidArea(gapDim));
@@ -1881,14 +1883,7 @@ public class GUIFrame extends OSFixJFrame implements EventTimeListener, EventErr
 
 		// Set the initial state for the "Show Grid" check box
 		ent = (DisplayEntity) Entity.getNamedEntity("XY-Grid");
-		if (ent == null) {
-			grid.setEnabled(false);
-			grid.setSelected(false);
-		}
-		else {
-			grid.setEnabled(true);
-			grid.setSelected(ent.getShow());
-		}
+		grid.setSelected(ent != null && ent.getShow());
 	}
 
 	// ******************************************************************************************************
@@ -2090,15 +2085,10 @@ public class GUIFrame extends OSFixJFrame implements EventTimeListener, EventErr
 		@Override
 		public void stateChanged( ChangeEvent e ) {
 			Double val = (Double)((JSpinner)e.getSource()).getValue();
-
-			String str;
-			if (val.doubleValue() >= 1.0) {
-				str = String.format("%.0f", val);
-			}
-			else {
-				str = String.format("%.6f", val);
-			}
-			InputAgent.applyArgs(Simulation.getInstance(), "RealTimeFactor", str);
+			NumberFormat nf = NumberFormat.getNumberInstance(Locale.US);
+			DecimalFormat df = (DecimalFormat)nf;
+			df.applyPattern("0.######");
+			InputAgent.applyArgs(Simulation.getInstance(), "RealTimeFactor", df.format(val));
 		}
 	}
 
@@ -2144,10 +2134,8 @@ public class GUIFrame extends OSFixJFrame implements EventTimeListener, EventErr
 	public static class RealTimeActionListener implements ActionListener {
 		@Override
 		public void actionPerformed( ActionEvent event ) {
-			if (((JToggleButton)event.getSource()).isSelected())
-				InputAgent.applyArgs(Simulation.getInstance(), "RealTime", "TRUE");
-			else
-				InputAgent.applyArgs(Simulation.getInstance(), "RealTime", "FALSE");
+			boolean bool = ((JToggleButton)event.getSource()).isSelected();
+			InputAgent.applyBoolean(Simulation.getInstance(), "RealTime", bool);
 		}
 	}
 
@@ -2636,7 +2624,7 @@ public class GUIFrame extends OSFixJFrame implements EventTimeListener, EventErr
 				options[0]);
 
 		if (userOption == JOptionPane.YES_OPTION) {
-			InputAgent.applyArgs(Simulation.getInstance(), "ShowLogViewer", "TRUE");
+			InputAgent.applyBoolean(Simulation.getInstance(), "ShowLogViewer", true);
 		}
 	}
 

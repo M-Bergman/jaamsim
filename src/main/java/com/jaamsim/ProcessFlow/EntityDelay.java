@@ -1,6 +1,7 @@
 /*
  * JaamSim Discrete Event Simulation
  * Copyright (C) 2013 Ausenco Engineering Canada Inc.
+ * Copyright (C) 2018 JaamSim Software Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,16 +22,16 @@ import java.util.HashMap;
 
 import com.jaamsim.Graphics.DisplayEntity;
 import com.jaamsim.Graphics.PolylineInfo;
+import com.jaamsim.Samples.SampleConstant;
 import com.jaamsim.Samples.SampleInput;
 import com.jaamsim.basicsim.EntityTarget;
 import com.jaamsim.input.BooleanInput;
 import com.jaamsim.input.ColourInput;
 import com.jaamsim.input.Input;
+import com.jaamsim.input.IntegerInput;
 import com.jaamsim.input.Keyword;
-import com.jaamsim.input.ValueInput;
 import com.jaamsim.math.Color4d;
 import com.jaamsim.math.Vec3d;
-import com.jaamsim.units.DimensionlessUnit;
 import com.jaamsim.units.TimeUnit;
 
 /**
@@ -43,6 +44,18 @@ public class EntityDelay extends LinkedComponent {
 	         exampleList = { "3.0 h", "NormalDistribution1", "'1[s] + 0.5*[TimeSeries1].PresentValue'" })
 	private final SampleInput duration;
 
+	@Keyword(description = "If TRUE, an entity can pass a second entity that started ahead of it. "
+	                     + "If FALSE, the entity's duration is increased sufficiently for it to "
+	                     + "arrive no earlier than the previous entity.",
+	         exampleList = {"TRUE"})
+	private final BooleanInput allowOvertaking;
+
+	@Keyword(description = "The minimum time between the previous entity leaving the path and "
+	                     + "the present entity leaving the path. "
+	                     + "Applicable only when entities are prevented from overtaking.",
+	         exampleList = { "3.0 h", "NormalDistribution1", "'1[s] + 0.5*[TimeSeries1].PresentValue'" })
+	private final SampleInput minSeparation;
+
 	@Keyword(description = "If TRUE, a delayed entity is moved along the specified path to "
 	                     + "indicate its progression through the delay.",
 	         exampleList = {"TRUE"})
@@ -50,12 +63,13 @@ public class EntityDelay extends LinkedComponent {
 
 	@Keyword(description = "The width of the path in pixels.",
 	         exampleList = {"1"})
-	private final ValueInput widthInput;
+	private final IntegerInput widthInput;
 
 	@Keyword(description = "The colour of the path.",
 	         exampleList = {"red"})
 	private final ColourInput colorInput;
 
+	private double exitTime;  // time at which the previous entity will leave the path
 	private final HashMap<Long, EntityDelayEntry> entityMap = new HashMap<>();  // List of the entities being handled
 
 	{
@@ -68,12 +82,20 @@ public class EntityDelay extends LinkedComponent {
 		duration.setRequired(true);
 		this.addInput(duration);
 
+		allowOvertaking = new BooleanInput("AllowOvertaking", KEY_INPUTS, true);
+		this.addInput(allowOvertaking);
+
+		minSeparation = new SampleInput("MinSeparation", KEY_INPUTS, new SampleConstant(0.0d));
+		minSeparation.setUnitType(TimeUnit.class);
+		minSeparation.setEntity(this);
+		minSeparation.setValidRange(0, Double.POSITIVE_INFINITY);
+		this.addInput(minSeparation);
+
 		animation = new BooleanInput("Animation", GRAPHICS, true);
 		this.addInput(animation);
 
-		widthInput = new ValueInput("Width", GRAPHICS, 1.0d);
-		widthInput.setUnitType(DimensionlessUnit.class);
-		widthInput.setValidRange(1.0d, Double.POSITIVE_INFINITY);
+		widthInput = new IntegerInput("Width", GRAPHICS, 1);
+		widthInput.setValidRange(1, Integer.MAX_VALUE);
 		widthInput.setDefaultText("PolylineModel");
 		this.addInput(widthInput);
 
@@ -106,6 +128,7 @@ public class EntityDelay extends LinkedComponent {
 	@Override
 	public void earlyInit() {
 		super.earlyInit();
+		exitTime = Double.NEGATIVE_INFINITY;
 		entityMap.clear();
 	}
 
@@ -128,6 +151,13 @@ public class EntityDelay extends LinkedComponent {
 		double simTime = this.getSimTime();
 		double dur = duration.getValue().getNextSample(simTime);
 
+		// Adjust the duration for the previous entity's exit time
+		if (!allowOvertaking.getValue()) {
+			double sep = minSeparation.getValue().getNextSample(simTime);
+			dur = Math.max(dur, exitTime - simTime + sep);
+			exitTime = simTime + dur;
+		}
+
 		// Add the entity to the list of entities being delayed
 		if (animation.getValue()) {
 			EntityDelayEntry entry = new EntityDelayEntry();
@@ -136,8 +166,11 @@ public class EntityDelay extends LinkedComponent {
 			entry.duration = dur;
 			entityMap.put(ent.getEntityNumber(), entry);
 		}
+		else {
+			ent.setGlobalPosition(this.getGlobalPosition());
+		}
 
-		this.scheduleProcess(dur, 5, new RemoveDisplayEntityTarget(this, ent));
+		scheduleProcess(dur, 5, true, new RemoveDisplayEntityTarget(this, ent), null); // FIFO
 
 		// Set the present state to Working
 		this.setPresentState();
@@ -199,7 +232,7 @@ public class EntityDelay extends LinkedComponent {
 	public PolylineInfo[] buildScreenPoints(double simTime) {
 		int wid = -1;
 		if (!widthInput.isDefault())
-			wid = Math.max(1, widthInput.getValue().intValue());
+			wid = Math.max(1, widthInput.getValue());
 
 		Color4d col = null;
 		if (!colorInput.isDefault())

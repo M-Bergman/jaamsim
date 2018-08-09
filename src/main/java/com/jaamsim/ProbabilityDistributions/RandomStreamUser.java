@@ -1,7 +1,6 @@
 /*
  * JaamSim Discrete Event Simulation
- * Copyright (C) 2005-2013 Ausenco Engineering Canada Inc.
- * Copyright (C) 2016-2018 JaamSim Software Inc.
+ * Copyright (C) 2018 JaamSim Software Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,28 +14,20 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.jaamsim.ui;
+package com.jaamsim.ProbabilityDistributions;
 
-import java.awt.event.ActionEvent;
+public interface RandomStreamUser {
 
-import com.jaamsim.ui.EditBox.EditTable;
+	/**
+	 * Returns the random seed used by this object.
+	 * @return random seed
+	 */
+	public int getStreamNumber();
 
-/**
- * Handles inputs that are edited in place.
- *
- */
-public class StringEditor extends ChooserEditor {
-
-	public StringEditor(EditTable table) {
-		super(table, false);
-	}
-
-	@Override
-	public boolean canRetry() {
-		return true;
-	}
-
-	@Override
-	public void actionPerformed(ActionEvent e) {}
+	/**
+	 * Returns the keyword used to enter the random seed.
+	 * @return random seed keyword
+	 */
+	public String getStreamNumberKeyword();
 
 }

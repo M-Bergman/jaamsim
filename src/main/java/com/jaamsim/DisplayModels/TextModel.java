@@ -1,6 +1,7 @@
 /*
  * JaamSim Discrete Event Simulation
  * Copyright (C) 2013 Ausenco Engineering Canada Inc.
+ * Copyright (C) 2018 JaamSim Software Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -156,7 +157,7 @@ public class TextModel extends DisplayModel {
 		}
 	}
 
-	private static int getStyle(ArrayList<String> strArray) {
+	public static int getStyle(ArrayList<String> strArray) {
 		int ret = Font.PLAIN;
 		for(String each: strArray ) {
 			if(each.equalsIgnoreCase("Bold") ) {
@@ -187,6 +188,45 @@ public class TextModel extends DisplayModel {
 		return (ent instanceof TextBasics) || (ent instanceof OverlayText);
 	}
 
+	public TessFontKey getTessFontKey() {
+		return new TessFontKey(fontName.getChoice(), style);
+	}
+
+	public static TessFontKey getDefaultTessFontKey() {
+		return new TessFontKey("Verdana", Font.PLAIN);
+	}
+
+	public Color4d getFontColor() {
+		return fontColor.getValue();
+	}
+
+	public double getTextHeight() {
+		return textHeight.getValue();
+	}
+
+	public String getFontName() {
+		return fontName.getChoice();
+	}
+
+	public int getStyle() {
+		return getStyle(fontStyle.getValue());
+	}
+
+	public boolean getDropShadow() {
+		return dropShadow.getValue();
+	}
+
+	public Color4d getDropShadowColor() {
+		return dropShadowColor.getValue();
+	}
+
+	public Vec3d getDropShadowOffset() {
+		return dropShadowOffset.getValue();
+	}
+
+	// ********************************************************************************************
+	// Binding
+	// ********************************************************************************************
 	private class Binding extends DisplayModelBinding {
 
 		private TextBasics labelObservee;
@@ -229,45 +269,14 @@ public class TextModel extends DisplayModel {
 			}
 
 			String text = labelObservee.getCachedText();
-
-			double height = textHeight.getValue();
-			if (!labelObservee.getTextHeightInput().isDefault()) {
-				height = labelObservee.getTextHeightInput().getValue();
-			}
-
-			Color4d color = fontColor.getValue();
-			if (!labelObservee.getFontColorInput().isDefault()) {
-				color = labelObservee.getFontColorInput().getValue();
-			}
-
-			int stl = style;
-			if (!labelObservee.getFontStyleInput().isDefault()) {
-				stl = getStyle(labelObservee.getFontStyleInput().getValue());
-			}
-
-			String fn = fontName.getChoice();
-			if (!labelObservee.getFontNameInput().isDefault())
-				fn = labelObservee.getFontNameInput().getChoice();
-			TessFontKey fk = new TessFontKey(fn, stl);
-
+			double height = labelObservee.getTextHeight();
+			Color4d color = labelObservee.getFontColor();
+			TessFontKey fk = labelObservee.getTessFontKey();
 			Vec3d textSize = RenderManager.inst().getRenderedStringSize(fk, height, text);
 			Transform trans = labelObservee.getGlobalTransForSize(textSize);
-
-			boolean ds = dropShadow.getValue();
-			if (!labelObservee.getDropShadowInput().isDefault()) {
-				ds = labelObservee.getDropShadowInput().getValue();
-			}
-
-			Color4d dsColor = dropShadowColor.getValue();
-			if (!labelObservee.getDropShadowColorInput().isDefault()) {
-				dsColor = labelObservee.getDropShadowColorInput().getValue();
-			}
-
-			Vec3d dsOffset = dropShadowOffset.getValue();
-			if (!labelObservee.getDropShadowOffsetInput().isDefault()) {
-				dsOffset = labelObservee.getDropShadowOffsetInput().getValue();
-			}
-
+			boolean ds = labelObservee.getDropShadow();
+			Color4d dsColor = labelObservee.getDropShadowColor();
+			Vec3d dsOffset = labelObservee.getDropShadowOffset();
 			boolean editMode = labelObservee.isEditMode();
 			int insertPos = labelObservee.getInsertPosition();
 			int numSelected = labelObservee.getNumberSelected();
@@ -369,6 +378,9 @@ public class TextModel extends DisplayModel {
 		}
 	}
 
+	// ********************************************************************************************
+	// OverlayBinding
+	// ********************************************************************************************
 	private class OverlayBinding extends DisplayModelBinding {
 
 		private OverlayText labelObservee;
@@ -410,43 +422,15 @@ public class TextModel extends DisplayModel {
 			}
 
 			String text = labelObservee.getCachedText();
-
 			IntegerVector pos = labelObservee.getScreenPosition();
 			int height = labelObservee.getTextHeight();
-
 			boolean alignRight = labelObservee.getAlignRight();
 			boolean alignBottom = labelObservee.getAlignBottom();
-
-			Color4d color = fontColor.getValue();
-			if (!labelObservee.getFontColorInput().isDefault()) {
-				color = labelObservee.getFontColorInput().getValue();
-			}
-
-			int stl = style;
-			if (!labelObservee.getFontStyleInput().isDefault()) {
-				stl = getStyle(labelObservee.getFontStyleInput().getValue());
-			}
-
-			String fn = fontName.getChoice();
-			if (!labelObservee.getFontNameInput().isDefault())
-				fn = labelObservee.getFontNameInput().getChoice();
-			TessFontKey fk = new TessFontKey(fn, stl);
-
-			boolean ds = dropShadow.getValue();
-			if (!labelObservee.getDropShadowInput().isDefault()) {
-				ds = labelObservee.getDropShadowInput().getValue();
-			}
-
-			Color4d dsColor = dropShadowColor.getValue();
-			if (!labelObservee.getDropShadowColorInput().isDefault()) {
-				dsColor = labelObservee.getDropShadowColorInput().getValue();
-			}
-
-			Vec3d dsOffset = new Vec3d(dropShadowOffset.getValue());
-			if (!labelObservee.getDropShadowOffsetInput().isDefault()) {
-				dsOffset = new Vec3d(labelObservee.getDropShadowOffsetInput().getValue());
-			}
-			dsOffset.scale3(height);
+			Color4d color = labelObservee.getFontColor();
+			TessFontKey fk = labelObservee.getTessFontKey();
+			boolean ds = labelObservee.getDropShadow();
+			Color4d dsColor = labelObservee.getDropShadowColor();
+			Vec3d dsOffset = labelObservee.getDropShadowOffset();
 
 			VisibilityInfo vi = getVisibilityInfo();
 
@@ -489,7 +473,8 @@ public class TextModel extends DisplayModel {
 			cachedProxies = new ArrayList<>();
 
 			if (ds) {
-
+				dsOffset = new Vec3d(dsOffset);
+				dsOffset.scale3(height);
 				cachedProxies.add(new OverlayStringProxy(text, fk, dsColor, height,
 				                                      pos.get(0) + (dsOffset.x * (alignRight ? -1 : 1)),
 				                                      pos.get(1) - (dsOffset.y * (alignBottom ? -1 : 1)),
@@ -508,6 +493,9 @@ public class TextModel extends DisplayModel {
 		}
 	}
 
+	// ********************************************************************************************
+	// BillboardBinding
+	// ********************************************************************************************
 	private class BillboardBinding extends DisplayModelBinding {
 
 		private BillboardText labelObservee;
@@ -546,43 +534,12 @@ public class TextModel extends DisplayModel {
 			}
 
 			String text = labelObservee.getCachedText();
-
-			int height = textHeight.getValue().intValue();
-			if (!labelObservee.getTextHeightInput().isDefault()) {
-				height = labelObservee.getTextHeightInput().getValue().intValue();
-			}
-
-			Color4d color = fontColor.getValue();
-			if (!labelObservee.getFontColorInput().isDefault()) {
-				color = labelObservee.getFontColorInput().getValue();
-			}
-
-			int stl = style;
-			if (!labelObservee.getFontStyleInput().isDefault()) {
-				stl = getStyle(labelObservee.getFontStyleInput().getValue());
-			}
-
-			String fn = fontName.getChoice();
-			if (!labelObservee.getFontNameInput().isDefault())
-				fn = labelObservee.getFontNameInput().getChoice();
-			TessFontKey fk = new TessFontKey(fn, stl);
-
-			boolean ds = dropShadow.getValue();
-			if (!labelObservee.getDropShadowInput().isDefault()) {
-				ds = labelObservee.getDropShadowInput().getValue();
-			}
-
-			Color4d dsColor = dropShadowColor.getValue();
-			if (!labelObservee.getDropShadowColorInput().isDefault()) {
-				dsColor = labelObservee.getDropShadowColorInput().getValue();
-			}
-
-			Vec3d dsOffset = new Vec3d(dropShadowOffset.getValue());
-			if (!labelObservee.getDropShadowOffsetInput().isDefault()) {
-				dsOffset = new Vec3d(labelObservee.getDropShadowOffsetInput().getValue());
-			}
-			dsOffset.scale3(height);
-
+			int height = (int)labelObservee.getTextHeight();
+			Color4d color = labelObservee.getFontColor();
+			TessFontKey fk = labelObservee.getTessFontKey();
+			boolean ds = labelObservee.getDropShadow();
+			Color4d dsColor = labelObservee.getDropShadowColor();
+			Vec3d dsOffset = labelObservee.getDropShadowOffset();
 			Vec3d pos = labelObservee.getGlobalPosition();
 
 			VisibilityInfo vi = getVisibilityInfo();
@@ -622,6 +579,8 @@ public class TextModel extends DisplayModel {
 			cachedProxies = new ArrayList<>();
 
 			if (ds) {
+				dsOffset = new Vec3d(dsOffset);
+				dsOffset.scale3(height);
 				cachedProxies.add(new BillboardStringProxy(text, fk, dsColor, height, pos, dsOffset.x, dsOffset.y, vi));
 			}
 
@@ -633,22 +592,6 @@ public class TextModel extends DisplayModel {
 		protected void collectSelectionBox(double simTime, ArrayList<RenderProxy> out) {
 			// No selection widgets for now
 		}
-	}
-
-	public TessFontKey getTessFontKey() {
-		return new TessFontKey(fontName.getChoice(), style);
-	}
-
-	public static TessFontKey getDefaultTessFontKey() {
-		return new TessFontKey("Verdana", Font.PLAIN);
-	}
-
-	public Color4d getFontColor() {
-		return fontColor.getValue();
-	}
-
-	public double getTextHeight() {
-		return textHeight.getValue();
 	}
 
 }

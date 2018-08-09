@@ -1,7 +1,7 @@
 /*
  * JaamSim Discrete Event Simulation
  * Copyright (C) 2013 Ausenco Engineering Canada Inc.
- * Copyright (C) 2017 JaamSim Software Inc.
+ * Copyright (C) 2017-2018 JaamSim Software Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,8 +27,8 @@ import com.jaamsim.basicsim.Entity;
 import com.jaamsim.controllers.RenderManager;
 import com.jaamsim.input.BooleanInput;
 import com.jaamsim.input.ColourInput;
+import com.jaamsim.input.IntegerInput;
 import com.jaamsim.input.Keyword;
-import com.jaamsim.input.ValueInput;
 import com.jaamsim.input.Vec3dInput;
 import com.jaamsim.math.Color4d;
 import com.jaamsim.math.Mat4d;
@@ -42,7 +42,6 @@ import com.jaamsim.render.PolygonProxy;
 import com.jaamsim.render.RenderProxy;
 import com.jaamsim.render.RenderUtils;
 import com.jaamsim.render.VisibilityInfo;
-import com.jaamsim.units.DimensionlessUnit;
 import com.jaamsim.units.DistanceUnit;
 
 public class PolylineModel extends DisplayModel {
@@ -53,7 +52,7 @@ public class PolylineModel extends DisplayModel {
 
 	@Keyword(description = "The width of the polyline in pixels.",
 	         exampleList = {"1"})
-	private final ValueInput width;
+	private final IntegerInput width;
 
 	@Keyword(description = "If TRUE, an arrow head is displayed at the end of the polyline.",
 	         exampleList = {"TRUE", "FALSE"})
@@ -68,9 +67,8 @@ public class PolylineModel extends DisplayModel {
 		this.addInput(colour);
 		this.addSynonym(colour, "Color");
 
-		width = new ValueInput("Width", GRAPHICS, 1.0d);
-		width.setUnitType(DimensionlessUnit.class);
-		width.setValidRange(0.0d, Double.POSITIVE_INFINITY);
+		width = new IntegerInput("Width", GRAPHICS, 1);
+		width.setValidRange(0, Integer.MAX_VALUE);
 		this.addInput(width);
 
 		showArrowHead = new BooleanInput("ShowArrowHead", GRAPHICS, false);
@@ -100,6 +98,22 @@ public class PolylineModel extends DisplayModel {
 	@Override
 	public boolean canDisplayEntity(Entity ent) {
 		return (ent instanceof DisplayEntity);
+	}
+
+	public Color4d getColour() {
+		return colour.getValue();
+	}
+
+	public int getWidth() {
+		return Math.max(1, width.getValue());
+	}
+
+	public boolean getShowArrowHead() {
+		return showArrowHead.getValue();
+	}
+
+	public Vec3d getArrowHeadSize() {
+		return arrowHeadSize.getValue();
 	}
 
 	protected class Binding extends DisplayModelBinding {
@@ -150,12 +164,12 @@ public class PolylineModel extends DisplayModel {
 				globalTrans = displayObservee.getGlobalPositionTransform();
 			}
 
-			Color4d lineColour = colour.getValue();
-			int lineWidth = Math.max(1, width.getValue().intValue());
+			Color4d lineColour = getColour();
+			int lineWidth = getWidth();
 
-			Vec3d arrowSize = arrowHeadSize.getValue();
-			if (arrowObservee != null && !arrowObservee.getArrowHeadSizeInput().isDefault())
-				arrowSize = arrowObservee.getArrowHeadSizeInput().getValue();
+			Vec3d arrowSize = getArrowHeadSize();
+			if (arrowObservee != null)
+				arrowSize = arrowObservee.getArrowHeadSize();
 
 			VisibilityInfo vi = getVisibilityInfo();
 
@@ -164,7 +178,7 @@ public class PolylineModel extends DisplayModel {
 			dirty = dirty || !compareArray(pisCache, pis);
 			dirty = dirty || lineWidthCache != lineWidth;
 			dirty = dirty || dirty_col4d(lineColourCache, lineColour);
-			dirty = dirty || showArrowHeadCache != showArrowHead.getValue();
+			dirty = dirty || showArrowHeadCache != getShowArrowHead();
 			dirty = dirty || dirty_vec3d(arrowSizeCache, arrowSize);
 			dirty = dirty || !compare(globalTransCache, globalTrans);
 			dirty = dirty || !compare(viCache, vi);
@@ -172,7 +186,7 @@ public class PolylineModel extends DisplayModel {
 			pisCache = pis;
 			lineWidthCache = lineWidth;
 			lineColourCache = lineColour;
-			showArrowHeadCache = showArrowHead.getValue();
+			showArrowHeadCache = getShowArrowHead();
 			arrowSizeCache = arrowSize;
 			globalTransCache = globalTrans;
 			viCache = vi;
@@ -244,7 +258,7 @@ public class PolylineModel extends DisplayModel {
 			}
 
 			// Add the arrowhead
-			if (!showArrowHead.getValue())
+			if (!getShowArrowHead())
 				return;
 
 			ArrayList<Vec3d> curvePts = pis[0].getCurvePoints();

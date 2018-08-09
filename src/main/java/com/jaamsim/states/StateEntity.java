@@ -59,6 +59,7 @@ public class StateEntity extends DisplayEntity {
 
 	private long lastStateCollectionTick;
 	private long workingTicks;
+	private boolean useCurrentCycle;
 
 	protected FileEntity stateReportFile;        // The file to store the state information
 
@@ -117,12 +118,13 @@ public class StateEntity extends DisplayEntity {
 			lastStateCollectionTick = getSimTicks();
 		workingTicks = 0;
 		states.clear();
+		useCurrentCycle = false;
 
 		String initState = getInitialState().intern();
 		StateRecord init = new StateRecord(initState, isValidWorkingState(initState));
-		init.startTick = lastStateCollectionTick;
+		init.setStartTick(lastStateCollectionTick);
 		presentState = init;
-		states.put(init.name, init);
+		states.put(init.getName(), init);
 
 		this.setGraphicsForState(initState);
 	}
@@ -169,7 +171,7 @@ public class StateEntity extends DisplayEntity {
 		if (presentState == null)
 			this.initStateData();
 
-		if (presentState.name.equals(state))
+		if (presentState.getName().equals(state))
 			return;
 
 		StateRecord nextState = states.get(state);
@@ -179,13 +181,13 @@ public class StateEntity extends DisplayEntity {
 
 			String intState = state.intern();
 			nextState = new StateRecord(intState, isValidWorkingState(intState));
-			states.put(nextState.name, nextState);
+			states.put(nextState.getName(), nextState);
 		}
 
 		this.setGraphicsForState(state);
 
 		updateStateStats();
-		nextState.startTick = lastStateCollectionTick;
+		nextState.setStartTick(lastStateCollectionTick);
 
 		StateRecord prev = presentState;
 		presentState = nextState;
@@ -225,7 +227,7 @@ public class StateEntity extends DisplayEntity {
 			double timeOfPrevStart = evt.ticksToSeconds(prev.getStartTick());
 			stateReportFile.format("%.5f  %s.setState( \"%s\" ) dt = %g\n",
 			                       timeOfPrevStart, this.getName(),
-			                       prev.name, duration);
+			                       prev.getName(), duration);
 			stateReportFile.flush();
 		}
 
@@ -245,9 +247,8 @@ public class StateEntity extends DisplayEntity {
 		long durTicks = curTick - lastStateCollectionTick;
 		lastStateCollectionTick = curTick;
 
-		presentState.totalTicks += durTicks;
-		presentState.currentCycleTicks += durTicks;
-		if (presentState.working)
+		presentState.addTicks(durTicks);
+		if (presentState.isWorking())
 			workingTicks += durTicks;
 	}
 
@@ -256,11 +257,8 @@ public class StateEntity extends DisplayEntity {
 	 */
 	public void collectInitializationStats() {
 		updateStateStats();
-
 		for (StateRecord each : states.values()) {
-			each.initTicks = each.totalTicks;
-			each.totalTicks = 0;
-			each.completedCycleTicks = 0;
+			each.finishWarmUp();
 		}
 	}
 
@@ -269,11 +267,8 @@ public class StateEntity extends DisplayEntity {
 	 */
 	public void clearReportStats() {
 		updateStateStats();
-
-		// clear totalHours for each state record
 		for (StateRecord each : states.values()) {
-			each.totalTicks = 0;
-			each.completedCycleTicks = 0;
+			each.clearStats();
 		}
 	}
 
@@ -282,10 +277,8 @@ public class StateEntity extends DisplayEntity {
 	 */
 	public void clearCurrentCycleStats() {
 		updateStateStats();
-
-		// clear current cycle hours for each state record
 		for (StateRecord each : states.values()) {
-			each.currentCycleTicks = 0;
+			each.clearCurrentCycleStats();
 		}
 	}
 
@@ -294,11 +287,9 @@ public class StateEntity extends DisplayEntity {
 	 */
 	public void collectCycleStats() {
 		updateStateStats();
-
-		// finalize cycle for each state record
+		useCurrentCycle = true;
 		for (StateRecord each : states.values()) {
-			each.completedCycleTicks += each.currentCycleTicks;
-			each.currentCycleTicks = 0;
+			each.finishCycle();
 		}
 	}
 
@@ -310,7 +301,7 @@ public class StateEntity extends DisplayEntity {
 
 		String state = str.intern();
 		StateRecord stateRec = new StateRecord(state, isValidWorkingState(state));
-		states.put(stateRec.name, stateRec);
+		states.put(stateRec.getName(), stateRec);
 	}
 
 	public StateRecord getState(String state) {
@@ -324,7 +315,7 @@ public class StateEntity extends DisplayEntity {
 	private static class StateRecSort implements Comparator<StateRecord> {
 		@Override
 		public int compare(StateRecord sr1, StateRecord sr2) {
-			return sr1.name.compareTo(sr2.name);
+			return sr1.getName().compareTo(sr2.getName());
 		}
 	}
 
@@ -340,7 +331,7 @@ public class StateEntity extends DisplayEntity {
 	 * Return true if the entity is working
 	 */
 	public boolean isWorking() {
-		return presentState.working;
+		return presentState.isWorking();
 	}
 
 	/**
@@ -354,48 +345,47 @@ public class StateEntity extends DisplayEntity {
 		if (state == null)
 			return 0;
 
-		long ticks = state.totalTicks;
+		long ticks = state.getTotalTicks();
 		if (getState() == state)
 			ticks += (simTicks - lastStateCollectionTick);
 		return ticks;
 	}
 
 	public long getTicksInState(StateRecord state) {
+		return getTicksInState(getSimTicks(), state);
+	}
+
+	public long getCurrentCycleTicks(long simTicks, StateRecord state) {
 		if (state == null)
 			return 0;
 
-		long ticks = state.totalTicks;
+		long ticks = state.getCurrentCycleTicks();
 		if (getState() == state)
-			ticks += (getSimTicks() - lastStateCollectionTick);
+			ticks += (simTicks - lastStateCollectionTick);
 		return ticks;
 	}
 
 	public long getCurrentCycleTicks(StateRecord state) {
-		if (state == null)
-			return 0;
-
-		long ticks = state.currentCycleTicks;
-		if (getState() == state)
-			ticks += (getSimTicks() - lastStateCollectionTick);
-		return ticks;
+		return getCurrentCycleTicks(getSimTicks(), state);
 	}
 
 	public long getCompletedCycleTicks(StateRecord state) {
 		if (state == null)
 			return 0;
 
-		return state.completedCycleTicks;
+		return state.getCompletedCycleTicks();
 	}
+
 	public long getInitTicks(StateRecord state) {
 		if (state == null)
 			return 0;
 
-		return state.initTicks;
+		return state.getInitTicks();
 	}
 
 	private long getWorkingTicks(long simTicks) {
 		long ticks = workingTicks;
-		if (presentState.working)
+		if (presentState.isWorking())
 			ticks += (simTicks - lastStateCollectionTick);
 
 		return ticks;
@@ -447,6 +437,21 @@ public class StateEntity extends DisplayEntity {
 		return EventManager.ticksToSecs(ticks);
 	}
 
+	/**
+	 * Returns the total elapsed time in seconds after the completion of the initialisation period.
+	 * Includes the time in any completed cycles.
+	 * @param simTime - present simulation time
+	 * @return total time in any state
+	 */
+	public double getTotalTime(double simTime) {
+		long simTicks = EventManager.secsToNearestTick(simTime);
+		long ticks = 0L;
+		for (StateRecord rec : states.values()) {
+			ticks += getTicksInState(simTicks, rec);
+		}
+		return EventManager.ticksToSecs(ticks);
+	}
+
 	@Output(name = "State",
 	 description = "The present state for the object.",
 	    unitType = DimensionlessUnit.class,
@@ -455,7 +460,7 @@ public class StateEntity extends DisplayEntity {
 		if (presentState == null) {
 			return this.getInitialState();
 		}
-		return presentState.name;
+		return presentState.getName();
 	}
 
 	@Output(name = "WorkingState",
@@ -465,7 +470,7 @@ public class StateEntity extends DisplayEntity {
 		if (presentState == null) {
 			return this.isValidWorkingState(this.getInitialState());
 		}
-		return presentState.working;
+		return presentState.isWorking();
 	}
 
 	@Output(name = "WorkingTime",
@@ -485,7 +490,7 @@ public class StateEntity extends DisplayEntity {
 
 	@Output(name = "StateTimes",
 	 description = "The total time recorded for each state after the completion of "
-	             + "the initialisation period.",
+	             + "the initialisation period. Includes only the present cycle, if applicable.",
 	    unitType = TimeUnit.class,
 	  reportable = true,
 	    sequence = 3)
@@ -494,23 +499,31 @@ public class StateEntity extends DisplayEntity {
 		LinkedHashMap<String, Double> ret = new LinkedHashMap<>(states.size());
 		for (StateRecord stateRec : this.getStateRecs()) {
 			long ticks = getTicksInState(simTicks, stateRec);
+			if (useCurrentCycle)
+				ticks = getCurrentCycleTicks(simTicks, stateRec);
 			Double t = EventManager.ticksToSecs(ticks);
-			ret.put(stateRec.name, t);
+			ret.put(stateRec.getName(), t);
 		}
 		return ret;
 	}
 
 	@Output(name = "TotalTime",
 	 description = "The total time the entity has spent in the model after the completion of "
-	             + "the initialisation period. It is equal to the sum of the state times.",
+	             + "the initialisation period. It is equal to the sum of the state times. "
+	             + "Includes only the present cycle, if applicable.",
 	    unitType = TimeUnit.class,
 	  reportable = true,
 	    sequence = 4)
-	public double getTotalTime(double simTime) {
+	public double getTotalTimeInCycle(double simTime) {
 		long simTicks = EventManager.secsToNearestTick(simTime);
 		long ticks = 0L;
 		for (StateRecord stateRec : states.values()) {
-			ticks += getTicksInState(simTicks, stateRec);
+			if (useCurrentCycle) {
+				ticks += getCurrentCycleTicks(simTicks, stateRec);
+			}
+			else {
+				ticks += getTicksInState(simTicks, stateRec);
+			}
 		}
 		return EventManager.ticksToSecs(ticks);
 	}

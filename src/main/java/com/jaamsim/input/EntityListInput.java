@@ -48,9 +48,7 @@ public class EntityListInput<T extends Entity> extends ListInput<ArrayList<T>> {
 
 		// If adding to the list
 		if( kw.getArg( 0 ).equals( "++" ) ) {
-			ArrayList<String> input = new ArrayList<>(kw.numArgs()-1);
-			for (int i = 1; i < kw.numArgs(); i++)
-				input.add(kw.getArg(i));
+			KeywordIndex subKw = new KeywordIndex(kw, 1);
 
 			ArrayList<T> newValue;
 			if( value == null )
@@ -58,49 +56,49 @@ public class EntityListInput<T extends Entity> extends ListInput<ArrayList<T>> {
 			else
 				newValue = new ArrayList<>( value );
 
-			Input.assertCountRange(input, 0, maxCount - newValue.size());
+			Input.assertCountRange(subKw, 0, maxCount - newValue.size());
 			if( even ) {
 				if ((kw.numArgs() % 2) == 0)
 					throw new InputErrorException(INP_ERR_EVENCOUNT, kw.argString());
 			}
 
-			ArrayList<T> addedValues = Input.parseEntityList(input, entClass, unique);
+			ArrayList<T> addedValues = Input.parseEntityList(subKw, entClass, unique);
 			for( T val : addedValues ) {
 				if( unique && newValue.contains( val ) )
 					throw new InputErrorException(INP_ERR_NOTUNIQUE, val.getName());
 				newValue.add( val );
 			}
 			value = newValue;
+			return;
 		}
-		// If removing from the list
-		else if( kw.getArg( 0 ).equals( "--" ) ) {
-			ArrayList<String> input = new ArrayList<>(kw.numArgs()-1);
-			for (int i = 1; i < kw.numArgs(); i++)
-				input.add(kw.getArg(i));
 
-			Input.assertCountRange(input, 0, value.size() - minCount );
+		// If removing from the list
+		if( kw.getArg( 0 ).equals( "--" ) ) {
+			KeywordIndex subKw = new KeywordIndex(kw, 1);
+
+			Input.assertCountRange(subKw, 0, value.size() - minCount );
 			if( even ) {
 				if ((kw.numArgs() % 2) == 0)
 					throw new InputErrorException(INP_ERR_EVENCOUNT, kw.argString());
 			}
 
 			ArrayList<T> newValue = new ArrayList<>( value );
-			ArrayList<T> removedValues = Input.parseEntityList(input, entClass, unique);
+			ArrayList<T> removedValues = Input.parseEntityList(subKw, entClass, unique);
 			for( T val : removedValues ) {
 				if( ! newValue.contains( val ) )
 					InputAgent.logWarning( "Could not remove " + val + " from " + this.getKeyword() );
 				newValue.remove( val );
 			}
 			value = newValue;
+			return;
 		}
-		// Otherwise, just set the list normally
-		else {
-			Input.assertCountRange(kw, minCount, maxCount);
-			if( even )
-				Input.assertCountEven(kw);
 
-			value = Input.parseEntityList(kw, entClass, unique);
-		}
+		// Otherwise, just set the list normally
+		Input.assertCountRange(kw, minCount, maxCount);
+		if( even )
+			Input.assertCountEven(kw);
+
+		value = Input.parseEntityList(kw, entClass, unique);
 	}
 
 	@Override
@@ -128,10 +126,6 @@ public class EntityListInput<T extends Entity> extends ListInput<ArrayList<T>> {
 
 	public void setIncludeSelf(boolean bool) {
 		this.includeSelf = bool;
-	}
-
-	public void setValidClasses(ArrayList<Class<? extends Entity>> classes ) {
-		validClasses = classes;
 	}
 
 	@Override
@@ -227,8 +221,14 @@ public class EntityListInput<T extends Entity> extends ListInput<ArrayList<T>> {
 		return false;
 	}
 
-	public void setInvalidClasses(ArrayList<Class<? extends Entity>> classes) {
-		invalidClasses = classes;
+	public void addValidClass(Class<? extends Entity> aClass ) {
+		invalidClasses.remove(aClass);
+		validClasses.add(aClass);
+	}
+
+	public void addInvalidClass(Class<? extends Entity> aClass ) {
+		validClasses.remove(aClass);
+		invalidClasses.add(aClass);
 	}
 
 	@Override

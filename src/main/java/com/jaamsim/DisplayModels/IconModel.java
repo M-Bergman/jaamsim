@@ -1,7 +1,6 @@
 /*
  * JaamSim Discrete Event Simulation
- * Copyright (C) 2005-2013 Ausenco Engineering Canada Inc.
- * Copyright (C) 2016-2018 JaamSim Software Inc.
+ * Copyright (C) 2018 JaamSim Software Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,28 +14,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.jaamsim.ui;
-
-import java.awt.event.ActionEvent;
-
-import com.jaamsim.ui.EditBox.EditTable;
+package com.jaamsim.DisplayModels;
 
 /**
- * Handles inputs that are edited in place.
+ * Provides a separate class for the ImageModels used for object icons. It allows the ImageModels
+ * for icons to be separated from those for images imported by the user.
+ * @author Harry King
  *
  */
-public class StringEditor extends ChooserEditor {
-
-	public StringEditor(EditTable table) {
-		super(table, false);
-	}
-
-	@Override
-	public boolean canRetry() {
-		return true;
-	}
-
-	@Override
-	public void actionPerformed(ActionEvent e) {}
-
-}
+public class IconModel extends ImageModel {}

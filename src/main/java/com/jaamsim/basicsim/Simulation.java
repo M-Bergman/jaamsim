@@ -24,6 +24,7 @@ import java.util.Calendar;
 
 import javax.swing.JFrame;
 
+import com.jaamsim.ProbabilityDistributions.RandomStreamUser;
 import com.jaamsim.Samples.SampleConstant;
 import com.jaamsim.Samples.SampleInput;
 import com.jaamsim.StringProviders.StringProvListInput;
@@ -1040,6 +1041,35 @@ public class Simulation extends Entity {
 
 	public static int getSubstreamNumber() {
 		return (int)globalSeedInput.getValue().getNextSample(0.0);
+	}
+
+	/**
+	 * Returns the largest random seed used by the objects in the simulation.
+	 * @return largest random seed
+	 */
+	public static int getLargestStreamNumber() {
+		int seed = 0;
+		for (Entity each : Entity.getClonesOfIterator(Entity.class, RandomStreamUser.class)) {
+			RandomStreamUser user = (RandomStreamUser) each;
+			seed = Math.max(seed, user.getStreamNumber());
+		}
+		return seed;
+	}
+
+	/**
+	 * Returns a list of objects that use the specified random stream.
+	 * @param seed - random stream number
+	 * @return users of the random stream
+	 */
+	public static ArrayList<RandomStreamUser> getRandomStreamUsers(int seed) {
+		ArrayList<RandomStreamUser> ret = new ArrayList<>();
+		for (Entity each : Entity.getClonesOfIterator(Entity.class, RandomStreamUser.class)) {
+			RandomStreamUser user = (RandomStreamUser) each;
+			if (user.getStreamNumber() == seed) {
+				ret.add(user);
+			}
+		}
+		return ret;
 	}
 
 	public static boolean getPrintReport() {

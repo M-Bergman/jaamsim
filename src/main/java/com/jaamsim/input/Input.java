@@ -756,21 +756,6 @@ public abstract class Input<T> {
 		return temp;
 	}
 
-	public static BooleanVector parseBooleanVector(List<String> input)
-	throws InputErrorException {
-		BooleanVector temp = new BooleanVector(input.size());
-
-		for (int i = 0; i < input.size(); i++) {
-			try {
-				boolean element = Input.parseBoolean(input.get(i));
-				temp.add(element);
-			} catch (InputErrorException e) {
-				throw new InputErrorException(INP_ERR_ELEMENT, i+1, e.getMessage());
-			}
-		}
-		return temp;
-	}
-
 	public static ArrayList<Color4d> parseColorVector(KeywordIndex kw)
 	throws InputErrorException {
 		ArrayList<KeywordIndex> subArgs = kw.getSubArgs();
@@ -834,21 +819,6 @@ public abstract class Input<T> {
 			return true;
 		}
 		catch (NumberFormatException e) { return false; }
-	}
-
-	public static IntegerVector parseIntegerVector(List<String> input, int minValue, int maxValue)
-	throws InputErrorException {
-		IntegerVector temp = new IntegerVector(input.size());
-
-		for (int i = 0; i < input.size(); i++) {
-			try {
-				int element = Input.parseInteger(input.get(i), minValue, maxValue);
-				temp.add(element);
-			} catch (InputErrorException e) {
-				throw new InputErrorException(INP_ERR_ELEMENT, i+1, e.getMessage());
-			}
-		}
-		return temp;
 	}
 
 	public static IntegerVector parseIntegerVector(KeywordIndex kw, int minValue, int maxValue)
@@ -1109,24 +1079,6 @@ public abstract class Input<T> {
 	/**
 	 * Convert the given input to a DoubleVector and apply the given conversion factor
 	 */
-	public static DoubleVector parseDoubleVector(List<String> input, double minValue, double maxValue, double factor)
-	throws InputErrorException {
-		DoubleVector temp = new DoubleVector(input.size());
-
-		for (int i = 0; i < input.size(); i++) {
-			try {
-				double element = Input.parseDouble(input.get(i), minValue, maxValue, factor);
-				temp.add(element);
-			} catch (InputErrorException e) {
-				throw new InputErrorException(INP_ERR_ELEMENT, i+1, e.getMessage());
-			}
-		}
-		return temp;
-	}
-
-	/**
-	 * Convert the given input to a DoubleVector and apply the given conversion factor
-	 */
 	public static DoubleVector parseDoubles(KeywordIndex kw, double minValue, double maxValue, Class<? extends Unit> unitType)
 	throws InputErrorException {
 
@@ -1186,68 +1138,6 @@ public abstract class Input<T> {
 					throw new InputErrorException(INP_ERR_ELEMENT, i+1, e.getMessage());
 				else
 					throw e;
-			}
-		}
-		return temp;
-	}
-
-	/**
-	 * Convert the given input to a DoubleVector and apply the given conversion factor
-	 */
-	public static DoubleVector parseDoubles(List<String> input, double minValue, double maxValue, Class<? extends Unit> unitType)
-	throws InputErrorException {
-
-		if (unitType == UserSpecifiedUnit.class)
-			throw new InputErrorException(INP_ERR_UNITUNSPECIFIED);
-
-		double factor = 1.0d;
-		int numDoubles = input.size();
-
-		// Parse the unit portion of the input
-		String unitName = Parser.removeEnclosure("[", input.get(numDoubles-1), "]");
-		Unit unit = Input.tryParseUnit(unitName, unitType);
-
-		// A unit is mandatory except for dimensionless values and time values in RFC8601 date/time format
-		if (unit == null && unitType != DimensionlessUnit.class && unitType != TimeUnit.class)
-			throw new InputErrorException(INP_ERR_NOUNITFOUND, input.get(numDoubles-1), unitType.getSimpleName());
-
-		if (unit != null) {
-			factor = unit.getConversionFactorToSI();
-			numDoubles = numDoubles - 1;
-		}
-
-		// Parse the numeric portion of the input
-		DoubleVector temp = new DoubleVector(numDoubles);
-		for (int i = 0; i < numDoubles; i++) {
-			try {
-				// Time input
-				if (unitType == TimeUnit.class) {
-
-					// RFC8601 date/time format
-					if (Input.isRFC8601DateTime(input.get(i))) {
-						double element = Input.parseRFC8601DateTime(input.get(i))/1e6;
-						if (element < minValue || element > maxValue)
-							throw new InputErrorException(INP_ERR_DOUBLERANGE, minValue, maxValue, temp);
-						temp.add(element);
-					}
-					// Normal format
-					else {
-						if (unit == null)
-							throw new InputErrorException(INP_ERR_NOUNITFOUND, input.get(numDoubles-1), unitType.getSimpleName());
-						double element = Input.parseDouble(input.get(i), minValue, maxValue, factor);
-						temp.add(element);
-					}
-				}
-				// Non-time input
-				else {
-					double element = Input.parseDouble(input.get(i), minValue, maxValue, factor);
-					temp.add(element);
-				}
-			} catch (InputErrorException e) {
-				if (numDoubles == 1)
-					throw e;
-				else
-					throw new InputErrorException(INP_ERR_ELEMENT, i+1, e.getMessage());
 			}
 		}
 		return temp;
@@ -1428,43 +1318,6 @@ public abstract class Input<T> {
 
 		return temp;
 	}
-
-
-	public static <T extends Entity> ArrayList<T> parseEntityList(List<String> input, Class<T> aClass, boolean unique)
-	throws InputErrorException {
-		ArrayList<T> temp = new ArrayList<>(input.size());
-
-		for (int i = 0; i < input.size(); i++) {
-			Entity ent = Entity.getNamedEntity(input.get(i));
-			if (ent == null) {
-				throw new InputErrorException(INP_ERR_ENTNAME, input.get(i));
-			}
-
-			// If we found a group, expand the list of Entities
-			if (ent instanceof Group && aClass != Group.class) {
-				ArrayList<Entity> gList = ((Group)ent).getList();
-				for (int j = 0; j < gList.size(); j++) {
-					T t = Input.castEntity(gList.get(j), aClass);
-					if (t == null) {
-						throw new InputErrorException(INP_ERR_ENTCLASS, aClass.getSimpleName(), gList.get(j), gList.get(j).getClass().getSimpleName());
-					}
-					temp.add(t);
-				}
-			} else {
-				T t = Input.castEntity(ent, aClass);
-				if (t == null) {
-					throw new InputErrorException(INP_ERR_ENTCLASS, aClass.getSimpleName(), input.get(i), ent.getClass().getSimpleName());
-				}
-				temp.add(t);
-			}
-		}
-
-		if (unique)
-			Input.assertUnique(temp);
-
-		return temp;
-	}
-
 
 	public static <T extends Entity> ArrayList<ArrayList<T>> parseListOfEntityLists(KeywordIndex kw, Class<T> aClass, boolean unique)
 	throws InputErrorException {
